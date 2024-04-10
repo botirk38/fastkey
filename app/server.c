@@ -104,6 +104,8 @@ void cleanup(int server_fd) {
 
 void handle_client(int client_fd) {
 
+	while(1) {
+
 	char buffer[BUFFER_SIZE];
 
 	ssize_t bytes_received = recv(client_fd, buffer, BUFFER_SIZE, 0);
@@ -130,6 +132,10 @@ void handle_client(int client_fd) {
 
 	printf("Sent: %s\n", response);
 
+	}
+
 	close(client_fd);
+
+	
 }
 
