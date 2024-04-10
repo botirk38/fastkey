@@ -6,6 +6,8 @@
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
+#include "./network/thread_pool.h"
+#include <signal.h>
 
 
 #define BUFFER_SIZE 1024
@@ -13,9 +15,16 @@
 int create_server_socket();
 int bind_to_port(int server_fd, int port);
 int start_listening(int server_fd, int backlog);
-void accept_connections(int server_fd);
+void* accept_connections(void* arg);
 void cleanup(int server_fd);
 void handle_client(int client_fd);
+void* worker_func(void* arg);
+void init_thread_pool();
+void handle_sigint(int sig);
+void cleanup_thread_pool();
+
+
+volatile sig_atomic_t server_running = 1;
 
 int main() {
     setbuf(stdout, NULL);
@@ -26,15 +35,31 @@ int main() {
 
     if (bind_to_port(server_fd, 6379) == -1) {
         cleanup(server_fd);
+	cleanup_thread_pool();
         return 1;
     }
 
     if (start_listening(server_fd, 5) == -1) {
         cleanup(server_fd);
+	cleanup_thread_pool();
         return 1;
     }
 
-    accept_connections(server_fd);
+init_thread_pool();
+
+
+	  pthread_t accept_thread;
+    if (pthread_create(&accept_thread, NULL, accept_connections, &server_fd) != 0) {
+        perror("Failed to create accept thread");
+        cleanup(server_fd);
+        return 1;
+    }
+
+    // Wait for the accept thread to finish (e.g., on server shutdown)
+    pthread_join(accept_thread, NULL);
+
+
+cleanup_thread_pool();
     cleanup(server_fd);
 
     return 0;
@@ -79,24 +104,30 @@ int start_listening(int server_fd, int backlog) {
     return 0;
 }
 
-void accept_connections(int server_fd) {
-    printf("Waiting for a client to connect...\n");
-    struct sockaddr_in client_addr;
-    socklen_t client_addr_len = sizeof(client_addr);
-	int client_fd = accept(server_fd, (struct sockaddr *) &client_addr, &client_addr_len);
+void* accept_connections(void* arg) {
+    int server_fd = *(int*)arg;
+    printf("Waiting for clients to connect...\n");
 
-	if(client_fd == -1) {
-		perror("Accept failed: ");
-		return;
-	}
+    while (server_running) {
+        struct sockaddr_in client_addr;
+        socklen_t client_addr_len = sizeof(client_addr);
+        int client_fd = accept(server_fd, (struct sockaddr *)&client_addr, &client_addr_len);
 
-	printf("Client connected successfully!\n");
+        if (client_fd == -1) {
+            if (errno == EINTR) {
+                continue; // Interrupted by signal
+            }
+            perror("Accept failed");
+            continue;
+        }
 
+        printf("Client connected successfully!\n");
+        enqueue_client(client_fd);
+    }
 
-	handle_client(client_fd);
-
-
+    return NULL;
 }
+
 
 void cleanup(int server_fd) {
     close(server_fd);
@@ -104,38 +135,59 @@ void cleanup(int server_fd) {
 
 void handle_client(int client_fd) {
 
+
 	while(1) {
+    char buffer[BUFFER_SIZE] = {0};
 
-	char buffer[BUFFER_SIZE];
+    printf("Waiting to receive data...\n");
 
-	ssize_t bytes_received = recv(client_fd, buffer, BUFFER_SIZE, 0);
+    ssize_t bytes_received = recv(client_fd, buffer, BUFFER_SIZE - 1, 0); // -1 to leave space for null terminator
 
-	if(bytes_received == -1) {
-		perror("Receive failed: ");
-		return;
-	}
+    if (bytes_received <= 0) {
+        if (bytes_received == 0) printf("Client closed connection\n");
+        else perror("Receive failed");
+        close(client_fd);
+        return;
+    }
 
-	buffer[bytes_received] = '\0';
+    buffer[bytes_received] = '\0'; // Null-terminate the received data
 
+    printf("Received: %s\n", buffer);
 
-	printf("Received: %s\n", buffer);
+        char response[] = "+PONG\r\n";
+        if (send(client_fd, response, strlen(response), 0) == -1) {
+            perror("Send failed");
+        } else {
+            printf("Sent: %s\n", response);
+    }    
 
-
-	char response[] = "+PONG\r\n";
-
-	ssize_t bytes_sent = send(client_fd, response, strlen(response), 0);
-
-	if(bytes_sent == -1) {
-		perror("Send failed: ");
-		return;
-	}
-
-	printf("Sent: %s\n", response);
-
-	}
-
-	close(client_fd);
-
-	
 }
 
+	close(client_fd);
+}
+
+
+
+void* worker_func(void* arg) {
+	
+	while(1) {
+		int client_fd = dequeue_client();
+		handle_client(client_fd);
+	}
+}
+
+void init_thread_pool() {
+	for(int i = 0; i < NUM_THREADS; i++) {
+		pthread_create(&workers[i], NULL, worker_func, NULL);
+	}
+}
+
+void cleanup_thread_pool() {
+	for(int i = 0; i < NUM_THREADS; i++) {
+		pthread_join(workers[i], NULL);
+	}
+}
+
+void handle_sigint(int sig) {
+	server_running = 0;
+}

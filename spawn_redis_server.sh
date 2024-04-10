@@ -7,5 +7,5 @@
 # DON'T EDIT THIS!
 set -e
 tmpFile=$(mktemp)
-gcc app/*.c -o $tmpFile
+gcc app/*.c app/network/*.c -o $tmpFile
 exec $tmpFile "$@"
