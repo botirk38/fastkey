@@ -1,64 +1,93 @@
-#include <errno.h>
-#include <netinet/in.h>
-#include <netinet/ip.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <sys/socket.h>
+#include <netinet/in.h>
+#include <netinet/ip.h>
+#include <string.h>
+#include <errno.h>
 #include <unistd.h>
 
+int create_server_socket();
+int bind_to_port(int server_fd, int port);
+int start_listening(int server_fd, int backlog);
+void accept_connections(int server_fd);
+void cleanup(int server_fd);
+
 int main() {
-  // Disable output buffering
-  setbuf(stdout, NULL);
+    setbuf(stdout, NULL);
+    printf("Logs from your program will appear here!\n");
 
-  // You can use print statements as follows for debugging, they'll be visible
-  // when running tests.
-  printf("Logs from your program will appear here!\n");
+    int server_fd = create_server_socket();
+    if (server_fd == -1) return 1;
 
-  int server_fd;
-  socklen_t client_addr_len;
-  struct sockaddr_in client_addr;
+    if (bind_to_port(server_fd, 6379) == -1) {
+        cleanup(server_fd);
+        return 1;
+    }
 
-  server_fd = socket(AF_INET, SOCK_STREAM, 0);
-  if (server_fd == -1) {
-    printf("Socket creation failed: %s...\n", strerror(errno));
-    return 1;
-  }
+    if (start_listening(server_fd, 5) == -1) {
+        cleanup(server_fd);
+        return 1;
+    }
 
-  // Since the tester restarts your program quite often, setting SO_REUSEADDR
-  // ensures that we don't run into 'Address already in use' errors
-  int reuse = 1;
-  if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) <
-      0) {
-    printf("SO_REUSEADDR failed: %s \n", strerror(errno));
-    return 1;
-  }
+    accept_connections(server_fd);
+    cleanup(server_fd);
 
-  struct sockaddr_in serv_addr = {
-      .sin_family = AF_INET,
-      .sin_port = htons(6379),
-      .sin_addr = {htonl(INADDR_ANY)},
-  };
+    return 0;
+}
 
-  if (bind(server_fd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) != 0) {
-    printf("Bind failed: %s \n", strerror(errno));
-    return 1;
-  }
+int create_server_socket() {
+    int server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_fd == -1) {
+        printf("Socket creation failed: %s...\n", strerror(errno));
+        return -1;
+    }
 
-  int connection_backlog = 5;
-  if (listen(server_fd, connection_backlog) != 0) {
-    printf("Listen failed: %s \n", strerror(errno));
-    return 1;
-  }
+    int reuse = 1;
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0) {
+        printf("SO_REUSEADDR failed: %s \n", strerror(errno));
+        return -1;
+    }
 
-  printf("Waiting for a client to connect...\n");
-  client_addr_len = sizeof(client_addr);
+    return server_fd;
+}
 
-  accept(server_fd, (struct sockaddr *)&client_addr, &client_addr_len);
-  printf("Client connected\n");
+int bind_to_port(int server_fd, int port) {
+    struct sockaddr_in serv_addr = {
+        .sin_family = AF_INET,
+        .sin_port = htons(port),
+        .sin_addr = { htonl(INADDR_ANY) },
+    };
 
-  close(server_fd);
+    if (bind(server_fd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) != 0) {
+        printf("Bind failed: %s \n", strerror(errno));
+        return -1;
+    }
 
-  return 0;
+    return 0;
+}
+
+int start_listening(int server_fd, int backlog) {
+    if (listen(server_fd, backlog) != 0) {
+        printf("Listen failed: %s \n", strerror(errno));
+        return -1;
+    }
+    return 0;
+}
+
+void accept_connections(int server_fd) {
+    printf("Waiting for a client to connect...\n");
+    struct sockaddr_in client_addr;
+    socklen_t client_addr_len = sizeof(client_addr);
+
+    if (accept(server_fd, (struct sockaddr *) &client_addr, &client_addr_len) >= 0) {
+        printf("Client connected\n");
+    } else {
+        printf("Accept failed: %s\n", strerror(errno));
+    }
+}
+
+void cleanup(int server_fd) {
+    close(server_fd);
 }
 
