@@ -83,7 +83,7 @@ void accept_connections(int server_fd) {
     printf("Waiting for a client to connect...\n");
     struct sockaddr_in client_addr;
     socklen_t client_addr_len = sizeof(client_addr);
-int client_fd = accept(server_fd, (struct sockaddr *) &client_addr &client_addr_len);
+	int client_fd = accept(server_fd, (struct sockaddr *) &client_addr, &client_addr_len);
 
 	if(client_fd == -1) {
 		perror("Accept failed: ");
