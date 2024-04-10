@@ -7,11 +7,15 @@
 #include <errno.h>
 #include <unistd.h>
 
+
+#define BUFFER_SIZE 1024
+
 int create_server_socket();
 int bind_to_port(int server_fd, int port);
 int start_listening(int server_fd, int backlog);
 void accept_connections(int server_fd);
 void cleanup(int server_fd);
+void handle_client(int client_fd);
 
 int main() {
     setbuf(stdout, NULL);
@@ -79,15 +83,53 @@ void accept_connections(int server_fd) {
     printf("Waiting for a client to connect...\n");
     struct sockaddr_in client_addr;
     socklen_t client_addr_len = sizeof(client_addr);
+int client_fd = accept(server_fd, (struct sockaddr *) &client_addr &client_addr_len);
 
-    if (accept(server_fd, (struct sockaddr *) &client_addr, &client_addr_len) >= 0) {
-        printf("Client connected\n");
-    } else {
-        printf("Accept failed: %s\n", strerror(errno));
-    }
+	if(client_fd == -1) {
+		perror("Accept failed: ");
+		return;
+	}
+
+	printf("Client connected successfully!\n");
+
+
+	handle_client(client_fd);
+
+
 }
 
 void cleanup(int server_fd) {
     close(server_fd);
+}
+
+void handle_client(int client_fd) {
+
+	char buffer[BUFFER_SIZE];
+
+	ssize_t bytes_received = recv(client_fd, buffer, BUFFER_SIZE, 0);
+
+	if(bytes_received == -1) {
+		perror("Receive failed: ");
+		return;
+	}
+
+	buffer[bytes_received] = '\0';
+
+
+	printf("Received: %s\n", buffer);
+
+
+	char response[] = "+PONG\r\n";
+
+	ssize_t bytes_sent = send(client_fd, response, strlen(response), 0);
+
+	if(bytes_sent == -1) {
+		perror("Send failed: ");
+		return;
+	}
+
+	printf("Sent: %s\n", response);
+
+	close(client_fd);
 }
 
