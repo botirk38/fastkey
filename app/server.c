@@ -1,5 +1,6 @@
 #include "./network/thread_pool.h"
 #include "command-handler.h"
+#include "config.h"
 #include "parser.h"
 #include "utils/KeyValueStore.h"
 #include <errno.h>
@@ -29,15 +30,18 @@ void *deleteExpiredKeysWorker(void *arg);
 volatile sig_atomic_t server_running = 1;
 KeyValueStore store;
 
-int main() {
+int main(int argc, char *argv[]) {
+
   setbuf(stdout, NULL);
   printf("Logs from your program will appear here!\n");
+
+  Config config = parse_cli_args(argc, argv);
 
   int server_fd = create_server_socket();
   if (server_fd == -1)
     return 1;
 
-  if (bind_to_port(server_fd, 6379) == -1) {
+  if (bind_to_port(server_fd, config.port) == -1) {
     cleanup(server_fd);
     cleanup_thread_pool();
     return 1;
@@ -186,7 +190,8 @@ void handle_client(int client_fd) {
       printf("Arg %d: %s\n", i, command->args[i]);
     }
 
-    char *response = handleCommand(command->command, command->args, command->numArgs);
+    char *response =
+        handleCommand(command->command, command->args, command->numArgs);
 
     printf("Response: %s\n", response);
 
