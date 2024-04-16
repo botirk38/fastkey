@@ -60,7 +60,7 @@ int main(int argc, char *argv[]) {
 
   if (config.isSlave) {
 
-    if (startReplication(config.masterHost, config.masterPort) == false) {
+    if (startReplication(config.masterHost, config.masterPort, config.port) == false) {
       cleanup(server_fd);
       cleanup_thread_pool();
       return 1;

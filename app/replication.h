@@ -5,8 +5,16 @@
 
 int establishConnection(const char *host, int port);
 void closeConnection(int sockfd);
-bool sendPing(int sockfd);
-bool startReplication(const char *masterHost, int masterPort);
+
+void sendPing(int sockfd);
+void sendReplConf(int sockfd, int port);
+void sendReplConfCapaPsync2(int sockfd);
+
+bool startReplication(const char *masterHost, int masterPort, int port);
+
+bool waitForOk(int sockfd);
+bool waitForPong(int sockfd);
+
 
 #endif // REPLICATION_H
 
