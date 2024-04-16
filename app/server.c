@@ -4,6 +4,7 @@
 #include "parser.h"
 #include "replication.h"
 #include "utils/KeyValueStore.h"
+#include "utils/ReplicaStore.h"
 #include <errno.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>
@@ -31,6 +32,7 @@ void *deleteExpiredKeysWorker(void *arg);
 volatile sig_atomic_t server_running = 1;
 KeyValueStore store;
 Config config;
+Replicas replicas;
 
 int main(int argc, char *argv[]) {
 
@@ -57,10 +59,12 @@ int main(int argc, char *argv[]) {
 
   init_thread_pool();
   initKeyValueStore(&store);
+  initReplicas(&replicas);
 
   if (config.isSlave) {
 
-    if (startReplication(config.masterHost, config.masterPort, config.port) == false) {
+    if (startReplication(config.masterHost, config.masterPort, config.port) ==
+        false) {
       cleanup(server_fd);
       cleanup_thread_pool();
       return 1;
@@ -88,6 +92,7 @@ int main(int argc, char *argv[]) {
   pthread_join(keyExpiryThread, NULL);
 
   freeKeyValueStore(&store);
+  freeReplicas(&replicas);
   cleanup_thread_pool();
   cleanup(server_fd);
 
@@ -203,6 +208,22 @@ void handle_client(int client_fd) {
 
     char *response = handleCommand(command->command, command->args,
                                    command->numArgs, config.isSlave);
+
+    if (!config.isSlave) {
+      printf("Adding replica\n");
+      if (strcmp(command->command, "PSYNC") == 0) {
+
+        addReplica(&replicas, client_fd, config.masterHost, config.masterPort);
+      }
+
+      printf("Replicas: %d\n", replicas.numReplicas);
+
+      if (isWriteCommand(command->command) && replicas.numReplicas > 0) {
+        printf("Propagating command to replicas\n");
+        propagateCommandToReplicas(&replicas, buffer);
+      }
+
+    }
 
     printf("Response: %s\n", response);
 

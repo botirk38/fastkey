@@ -1,11 +1,11 @@
 #include "replication.h"
+#include "utils/utils.h"
 #include <arpa/inet.h> // for htons(), inet_pton()
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h> // for close()
-#include "utils/utils.h"
 
 int establishConnection(const char *host, int port) {
   int sockfd;
@@ -86,7 +86,6 @@ void sendPsync(int sockfd) {
   char *cmd = "*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n";
 
   send(sockfd, cmd, strlen(cmd), 0);
-
 }
 
 bool waitForOk(int sockfd) {
@@ -101,8 +100,6 @@ bool waitForOk(int sockfd) {
   buffer[n] = '\0';
   return true;
 }
-
-
 
 bool waitForPong(int sockfd) {
   char buffer[1024];
@@ -128,8 +125,7 @@ bool startReplication(const char *masterHost, int masterPort, int port) {
     return false;
   }
 
-  // Placeholder to keep the connection for further steps
-  // closeConnection(sockfd);
+  closeConnection(sockfd);
   return true;
 }
 
@@ -157,7 +153,6 @@ bool handShakeSuccess(int sockfd, int port) {
   }
 
   sendPsync(sockfd);
-
 
   return true;
 }

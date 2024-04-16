@@ -3,6 +3,9 @@
 
 #include <stdbool.h>
 
+
+
+
 int establishConnection(const char *host, int port);
 void closeConnection(int sockfd);
 

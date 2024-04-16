@@ -1,8 +1,8 @@
 #include "command-handler.h"
+#include "utils/utils.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "utils/utils.h"
 
 char *handlePing(char **args, int numArgs, bool isSlave) {
   (void)args;    // Unused parameter
@@ -97,31 +97,27 @@ char *handleReplConf(char **args, int numArgs, bool isSlave) {
   return response;
 }
 
+char *handlePsync(char **args, int numArgs, bool isSlave) {
+  char *response = "+FULLRESYNC 8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb 0\r\n";
+  char *rdbFile = createRDBFile();
 
+  if (rdbFile == NULL) {
+    return strdup("-ERROR RDB file creation failed\r\n");
+  }
 
-char* handlePsync(char **args, int numArgs, bool isSlave) {
-    char* response = "+FULLRESYNC 8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb 0\r\n";
-    char* rdbFile = createRDBFile();
-    
-    if (rdbFile == NULL) {
-        return strdup("-ERROR RDB file creation failed\r\n");
-    }
+  char *fullResponse = malloc(strlen(response) + strlen(rdbFile) + 1);
 
-    char* fullResponse = malloc(strlen(response) + strlen(rdbFile) + 1);
+  if (fullResponse == NULL) {
+    return strdup("-ERROR Memory allocation failed\r\n");
+  }
 
-    if (fullResponse == NULL) {
-        return strdup("-ERROR Memory allocation failed\r\n");
-    }
+  strcpy(fullResponse, response);
+  strcat(fullResponse, rdbFile);
 
-    strcpy(fullResponse, response);
-    strcat(fullResponse, rdbFile);
+  free(rdbFile);
 
-
-    free(rdbFile);
-
-    return fullResponse;
+  return fullResponse;
 }
-
 
 char *handleCommand(const char *command, char **args, int numArg,
                     bool isSlave) {
@@ -136,8 +132,8 @@ char *handleCommand(const char *command, char **args, int numArg,
 
 // Command table implementation
 Command commandTable[] = {
-    {"PING", handlePing}, {"ECHO", handleEcho}, {"SET", handleSet},
-    {"GET", handleGet},   {"INFO", handleInfo}, {"REPLCONF", handleReplConf}, {"PSYNC", handlePsync},
-    {NULL, NULL} // End of the command table
-    //
+    {"PING", handlePing},   {"ECHO", handleEcho}, {"SET", handleSet},
+    {"GET", handleGet},     {"INFO", handleInfo}, {"REPLCONF", handleReplConf},
+    {"PSYNC", handlePsync}, {NULL, NULL} // End of the command table
+                                         //
 };
