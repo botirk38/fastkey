@@ -192,7 +192,7 @@ void handle_client(int client_fd) {
     }
 
     char *response =
-        handleCommand(command->command, command->args, command->numArgs, false);
+        handleCommand(command->command, command->args, command->numArgs, config.isSlave);
 
     printf("Response: %s\n", response);
 

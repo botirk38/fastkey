@@ -1,8 +1,13 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+#include <stdbool.h>
+
 typedef struct {
   int port;
+  char* masterHost;
+  int masterPort;
+  bool isSlave;
 
 } Config;
 
