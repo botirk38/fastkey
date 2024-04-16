@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdbool.h>
 
 RespCommand *parseCommand(char *buffer) {
   RespCommand *command = malloc(sizeof(RespCommand));
@@ -54,6 +53,8 @@ RespCommand *parseCommand(char *buffer) {
   return command;
 }
 
+
+
 void freeRespCommand(RespCommand *cmd) {
   if (cmd) {
     free(cmd->command);
@@ -73,3 +74,4 @@ bool isWriteCommand(const char *command) {
 
   return false;
 }
+

@@ -7,8 +7,10 @@
 #include <sys/socket.h>
 #include <unistd.h> // for close()
 
+int sockfd;
+
+
 int establishConnection(const char *host, int port) {
-  int sockfd;
   struct sockaddr_in serv_addr;
 
   sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -125,7 +127,6 @@ bool startReplication(const char *masterHost, int masterPort, int port) {
     return false;
   }
 
-  closeConnection(sockfd);
   return true;
 }
 

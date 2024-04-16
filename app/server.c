@@ -28,6 +28,7 @@ void init_thread_pool();
 void handle_sigint(int sig);
 void cleanup_thread_pool();
 void *deleteExpiredKeysWorker(void *arg);
+void handle_master(int sockfd);
 
 volatile sig_atomic_t server_running = 1;
 KeyValueStore store;
@@ -51,7 +52,7 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  if (start_listening(server_fd, 5) == -1) {
+  if (start_listening(server_fd, 10) == -1) {
     cleanup(server_fd);
     cleanup_thread_pool();
     return 1;
@@ -60,16 +61,6 @@ int main(int argc, char *argv[]) {
   init_thread_pool();
   initKeyValueStore(&store);
   initReplicas(&replicas);
-
-  if (config.isSlave) {
-
-    if (startReplication(config.masterHost, config.masterPort, config.port) ==
-        false) {
-      cleanup(server_fd);
-      cleanup_thread_pool();
-      return 1;
-    }
-  }
 
   pthread_t accept_thread;
   if (pthread_create(&accept_thread, NULL, accept_connections, &server_fd) !=
@@ -85,6 +76,17 @@ int main(int argc, char *argv[]) {
     perror("Failed to create key expiry thread");
     cleanup(server_fd);
     return 1;
+  }
+
+  if (config.isSlave) {
+
+    if (startReplication(config.masterHost, config.masterPort, config.port) ==
+        false) {
+      cleanup(server_fd);
+      cleanup_thread_pool();
+      return 1;
+    }
+    enqueue_client(sockfd);
   }
 
   // Wait for the accept thread to finish (e.g., on server shutdown)
@@ -222,7 +224,6 @@ void handle_client(int client_fd) {
         printf("Propagating command to replicas\n");
         propagateCommandToReplicas(&replicas, buffer);
       }
-
     }
 
     printf("Response: %s\n", response);
@@ -233,11 +234,103 @@ void handle_client(int client_fd) {
   close(client_fd);
 }
 
+void handle_master(int master_fd) {
+  char buffer[BUFFER_SIZE];
+  char *bufferStr = NULL;
+  size_t bufferStrLength = 0;
+  ssize_t n = 0;
+
+  if (master_fd == -1) {
+    fprintf(stderr, "Master connection is closed\n");
+    return;
+  }
+
+  bufferStr = malloc(1); // Initially allocate buffer string
+  if (!bufferStr) {
+    perror("Failed to allocate memory");
+    return;
+  }
+  bufferStr[0] = '\0'; // Initialize empty C-string
+
+  while ((n = recv(master_fd, buffer, sizeof(buffer) - 1, 0)) > 0) {
+    buffer[n] = '\0'; // Null-terminate the string
+
+    // Append new data to buffer string
+    char *newBufferStr = realloc(bufferStr, bufferStrLength + n + 1);
+    if (!newBufferStr) {
+      perror("Failed to allocate memory");
+      free(bufferStr);
+      return;
+    }
+    bufferStr = newBufferStr;
+    memcpy(bufferStr + bufferStrLength, buffer, n);
+    bufferStrLength += n;
+    bufferStr[bufferStrLength] = '\0';
+
+    size_t pos = 0;
+    bool foundCommand = false;
+    while (true) {
+      size_t commandStart = pos;
+      while (commandStart < bufferStrLength && bufferStr[commandStart] != '*') {
+        commandStart++;
+      }
+
+      if (commandStart >= bufferStrLength)
+        break;
+
+      size_t commandEnd = commandStart;
+      while (commandEnd < bufferStrLength &&
+             !(bufferStr[commandEnd] == '\r' &&
+               bufferStr[commandEnd + 1] == '\n')) {
+        commandEnd++;
+      }
+
+      if (commandEnd >= bufferStrLength || bufferStr[commandEnd] != '\r')
+        break;
+
+      foundCommand = true;
+
+      // Process the command excluding "\r\n"
+
+      RespCommand *command = parseCommand(bufferStr + commandStart);
+
+      printf("Command: %s\n", command->command);
+
+      for (int i = 0; i < command->numArgs; i++) {
+        printf("Arg %d: %s\n", i, command->args[i]);
+      }
+
+      handleCommand(command->command, command->args, command->numArgs,
+                    config.isSlave);
+
+      // Prepare for the next iteration
+      pos = commandEnd + 2; // Move past the "\r\n" of the current command
+    }
+
+    if (foundCommand && pos > 0) {
+      memmove(bufferStr, bufferStr + pos, bufferStrLength - pos);
+      bufferStrLength -= pos;
+      bufferStr = realloc(bufferStr, bufferStrLength + 1);
+      if (!bufferStr) {
+        perror("Failed to allocate memory");
+        return;
+      }
+      bufferStr[bufferStrLength] = '\0';
+    }
+  }
+
+  free(bufferStr);
+}
+
 void *worker_func(void *arg) {
 
   while (1) {
     int client_fd = dequeue_client();
-    handle_client(client_fd);
+    if (client_fd == sockfd && config.isSlave) {
+      handle_master(client_fd);
+    } else {
+      handle_client(client_fd);
+    }
   }
 }
 

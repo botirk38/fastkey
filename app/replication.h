@@ -21,6 +21,9 @@ bool handShakeSuccess(int sockfd, int port);
 bool waitForOk(int sockfd);
 bool waitForPong(int sockfd);
 
+extern int sockfd;
+
+
 
 
 #endif // REPLICATION_H
