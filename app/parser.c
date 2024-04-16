@@ -43,7 +43,9 @@ RespCommand *parseCommand(char *buffer) {
     if (i == 0) {
       toUpper(part);
       command->command = part;
-    } else {
+    } 
+
+    else {
       command->args[command->numArgs++] = part;
     }
 

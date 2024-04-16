@@ -300,8 +300,12 @@ void handle_master(int master_fd) {
         printf("Arg %d: %s\n", i, command->args[i]);
       }
 
-      handleCommand(command->command, command->args, command->numArgs,
-                    config.isSlave);
+      char *response = handleCommand(command->command, command->args,
+                                     command->numArgs, config.isSlave);
+
+      if (!isWriteCommand(command->command)) {
+        send(master_fd, response, strlen(response), 0);
+      }
 
       // Prepare for the next iteration
       pos = commandEnd + 2; // Move past the "\r\n" of the current command

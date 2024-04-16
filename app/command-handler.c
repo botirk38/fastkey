@@ -88,11 +88,20 @@ char *handleInfo(char **args, int numArgs, bool isSlave) {
 
 char *handleReplConf(char **args, int numArgs, bool isSlave) {
 
-  (void)numArgs;
-  (void)args;
   (void)isSlave;
 
-  char *response = "+OK\r\n";
+  char *response;
+
+  if (numArgs == 2 && strcmp(args[0], "GETACK") == 0) {
+
+
+
+    response = "*3\r\n$8\r\nREPLCONF\r\n$3\r\nACK\r\n$1\r\n0\r\n";
+    printf("Received ACK\n");
+
+  } else {
+    response = "+OK\r\n";
+  }
 
   return response;
 }
