@@ -6,10 +6,11 @@
 
 typedef struct {
   char *command;
-  char *args;
+  char **args;
+  int numArgs;
 } RespCommand;
 
 RespCommand *parseCommand(char *buffer);
+void freeRespCommand(RespCommand *respCommand);
 
 #endif // !PARSER_H
-

@@ -4,74 +4,63 @@
 #include <string.h>
 
 RespCommand *parseCommand(char *buffer) {
-
-  RespCommand *command = malloc(sizeof(RespCommand));
-  if (!command) {
-    return NULL;
-  }
-
-  // Parsing the total number of elements expected
-  int numElements = atoi(buffer + 1);
-
-  buffer = strchr(buffer, '\n') + 1;
-  if (!buffer) {
-    free(command);
-    return NULL;
-  }
-
-  if (*buffer != '$') {
-    free(command);
-    return NULL;
-  }
-
-  int commandLength = atoi(buffer + 1);
-
-  if (commandLength <= 0) {
-    free(command);
-    return NULL;
-  }
-
-  buffer = strchr(buffer, '\n') + 1;
-  if (!buffer) {
-    free(command);
-    return NULL;
-  }
-  command->command = strndup(buffer, commandLength);
-  toUpper(command->command);
-
-  buffer += commandLength + 2;
-
-  if (!command->command) {
-    free(command);
-    return NULL;
-  }
-
-  if (numElements > 1) {
-    if (*buffer != '$') {
-      free(command->command);
-      free(command);
-      return NULL;
+    RespCommand *command = malloc(sizeof(RespCommand));
+    if (!command) {
+        return NULL;
     }
+    command->command = NULL;
+    command->args = NULL;
+    command->numArgs = 0;
 
-    int argumentLength = atoi(buffer + 1);
-    if (argumentLength <= 0) {
-      free(command->command);
-      free(command);
-      return NULL;
-    }
+    int numElements = atoi(buffer + 1);
+    command->args = malloc(sizeof(char*) * (numElements - 1));
 
     buffer = strchr(buffer, '\n') + 1;
     if (!buffer) {
-      free(command->command);
-      free(command);
-      return NULL;
+        freeRespCommand(command);
+        return NULL;
     }
 
-    command->args = strndup(buffer, argumentLength);
-  } else {
-    command->args = NULL; // No arguments
-  }
+    for (int i = 0; i < numElements; i++) {
+        if (*buffer != '$') {
+            freeRespCommand(command);
+            return NULL;
+        }
 
-  return command;
+        int length = atoi(buffer + 1);
+        buffer = strchr(buffer, '\n') + 1;
+        if (!buffer || length <= 0) {
+            freeRespCommand(command);
+            return NULL;
+        }
+
+        char *part = strndup(buffer, length);
+        if (!part) {
+            freeRespCommand(command);
+            return NULL;
+        }
+
+        if (i == 0) {
+            toUpper(part);
+            command->command = part;
+        } else {
+            command->args[command->numArgs++] = part;
+        }
+
+        buffer += length + 2; // Move past the current part and CRLF
+    }
+
+    return command;
+}
+
+void freeRespCommand(RespCommand *cmd) {
+    if (cmd) {
+        free(cmd->command);
+        for (int i = 0; i < cmd->numArgs; i++) {
+            free(cmd->args[i]);
+        }
+        free(cmd->args);
+        free(cmd);
+    }
 }
 

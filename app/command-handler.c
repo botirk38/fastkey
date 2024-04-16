@@ -1,42 +1,70 @@
 #include "command-handler.h"
-#include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-char *handlePing(const char *args) {
-    // RESP Simple String
-    return strdup("+PONG\r\n");
+char *handlePing(char **args) {
+  (void)args; // Unused parameter
+  return strdup("+PONG\r\n");
 }
 
-char *handleEcho(const char *args) {
-    if (args == NULL) {
-        return strdup("-ERROR No argument provided\r\n");
-    }
-    int len = strlen(args);
-    char *response = malloc(len + 20); 
-    if (response == NULL) {
-        return NULL; 
-    }
-    sprintf(response, "$%d\r\n%s\r\n", len, args);
-    return response;
+char *handleEcho(char **args) {
+  if (args == NULL || args[0] == NULL) {
+    return strdup("-ERROR No argument provided\r\n");
+  }
+  int len = strlen(args[0]);
+  char *response = malloc(len + 20); // Enough space for protocol overhead
+  if (response == NULL) {
+    return NULL;
+  }
+  sprintf(response, "$%d\r\n%s\r\n", len, args[0]);
+  return response;
 }
 
-char *handleCommand(const char *command, const char *args) {
-    for (int i = 0; commandTable[i].command != NULL; i++) {
-        if (strcmp(command, commandTable[i].command) == 0) {
-            char *response = commandTable[i].handler(args);
-            if (response == NULL) {
-                return strdup("-ERROR Handler failed\r\n");
-            }
-            return response;
-        }
-    }
-    return strdup("-ERROR Unknown command\r\n");
+char *handleSet(char **args) {
+  if (args[0] == NULL || args[1] == NULL) {
+    return strdup("-ERROR Insufficient arguments\r\n");
+  }
+  const char *key = args[0];
+  const char *value = args[1];
+  int expiry = 0;
+  printf("Setting key %s to value %s with expiry %d\n", key, value, expiry);
+
+  setKeyValue(&store, key, value, expiry);
+  return strdup("+OK\r\n");
 }
 
-// Definition of the command table.
+char *handleGet(char **args) {
+  if (args[0] == NULL) {
+    return strdup("-ERROR Key argument required\r\n");
+  }
+  const char *value = getKeyValue(&store, args[0]);
+  if (strcmp(value, "Key not found") == 0) {
+    return strdup("$-1\r\n"); // RESP format for null bulk string
+  }
+  int len = strlen(value);
+  char *response = malloc(len + 20); // Enough space for protocol overhead
+  sprintf(response, "$%d\r\n%s\r\n", len, value);
+  return response;
+}
+
+char *handleCommand(const char *command, char **args) {
+  for (int i = 0; commandTable[i].command != NULL; i++) {
+    if (strcmp(command, commandTable[i].command) == 0) {
+      printf("Handling command %s\n", command);
+      return commandTable[i].handler(args);
+    }
+  }
+  return strdup("-ERROR Unknown command\r\n");
+}
+
+// Command table implementation
 Command commandTable[] = {
     {"PING", handlePing},
     {"ECHO", handleEcho},
+    {"SET", handleSet},
+    {"GET", handleGet},
     {NULL, NULL} // End of the command table
 };
+
 

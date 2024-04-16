@@ -1,6 +1,7 @@
 #include "./network/thread_pool.h"
 #include "command-handler.h"
 #include "parser.h"
+#include "utils/KeyValueStore.h"
 #include <errno.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>
@@ -23,8 +24,10 @@ void *worker_func(void *arg);
 void init_thread_pool();
 void handle_sigint(int sig);
 void cleanup_thread_pool();
+void *deleteExpiredKeysWorker(void *arg);
 
 volatile sig_atomic_t server_running = 1;
+KeyValueStore store;
 
 int main() {
   setbuf(stdout, NULL);
@@ -47,6 +50,7 @@ int main() {
   }
 
   init_thread_pool();
+  initKeyValueStore(&store);
 
   pthread_t accept_thread;
   if (pthread_create(&accept_thread, NULL, accept_connections, &server_fd) !=
@@ -56,13 +60,31 @@ int main() {
     return 1;
   }
 
+  pthread_t keyExpiryThread;
+  if (pthread_create(&keyExpiryThread, NULL, deleteExpiredKeysWorker, &store) !=
+      0) {
+    perror("Failed to create key expiry thread");
+    cleanup(server_fd);
+    return 1;
+  }
+
   // Wait for the accept thread to finish (e.g., on server shutdown)
   pthread_join(accept_thread, NULL);
+  pthread_join(keyExpiryThread, NULL);
 
+  freeKeyValueStore(&store);
   cleanup_thread_pool();
   cleanup(server_fd);
 
   return 0;
+}
+
+void *deleteExpiredKeysWorker(void *arg) {
+  KeyValueStore *store = (KeyValueStore *)arg;
+  while (server_running) {
+    deleteExpiredKeys(store);
+  }
+  return NULL;
 }
 
 int create_server_socket() {
@@ -158,7 +180,10 @@ void handle_client(int client_fd) {
     RespCommand *command = parseCommand(buffer);
 
     printf("Command: %s\n", command->command);
-    printf("Argument: %s\n", command->args);
+
+    for (int i = 0; i < command->numArgs; i++) {
+      printf("Arg %d: %s\n", i, command->args[i]);
+    }
 
     char *response = handleCommand(command->command, command->args);
 
