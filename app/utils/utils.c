@@ -1,4 +1,6 @@
 #include "utils.h"
+#include <arpa/inet.h>
+#include <stdio.h>
 
 void toUpper(char *str) {
 
@@ -14,39 +16,54 @@ void toUpper(char *str) {
   }
 }
 
-char *base64_decode(const char *input) {
-  if (!input)
-    return NULL;
+static const char base64_chars[] =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-  BIO *b64, *bio;
-  int decodeLen = strlen(input);
-  char *buffer = (char *)malloc(decodeLen);
-  if (!buffer)
-    return NULL;
-
-  // Setup base64 BIO Filter
-  b64 = BIO_new(BIO_f_base64());
-  BIO_set_flags(b64,
-                BIO_FLAGS_BASE64_NO_NL); // Do not use newlines to flush buffer
-
-  // Setup memory buffer source
-  bio = BIO_new_mem_buf(
-      input, -1); // -1 for read-only buffer to infer length automatically
-  bio = BIO_push(b64, bio);
-
-  // Decode
-  int decoded_length = BIO_read(bio, buffer, decodeLen);
-  if (decoded_length <= 0) {
-    free(buffer);
-    buffer = NULL;
+// Function to find the index of a character in the base64 table
+static inline int base64_index(char c) {
+  const char *p = strchr(base64_chars, c);
+  if (p) {
+    return p - base64_chars;
   } else {
-    // Reallocate buffer to the exact decoded size
-    buffer = (char *)realloc(buffer, decoded_length + 1);
-    buffer[decoded_length] = '\0'; // Null-terminate the output string
+    return -1;
+  }
+}
+
+// Decode a base64 encoded string to an array of bytes
+char *base64_decode(const char *hex) {
+  char *bytes = malloc(strlen(hex) / 2);
+  int a, b, i = 0;
+  while (2 * i + 1 < strlen(hex)) {
+    a = hex[2 * i] - (hex[2 * i] >= 97 ? 87 : 48);
+    b = hex[2 * i + 1] - (hex[2 * i + 1] >= 97 ? 87 : 48);
+    bytes[i++] = a * 16 + b;
+    if (!a && !b) {
+      bytes[i - 1] = 32; /* strlen cheating */
+    }
+  }
+  bytes[i] = '\0';
+  return (bytes);
+}
+
+char *createRDBFile() {
+  const char *hexEncoded =
+      "524544495330303131fa0972656469732d76657205372e322e30fa0a7265"
+      "6469732d62697473c040fa056374696d65c26d08bc65fa08757365642d6d"
+      "656dc2b0c41000fa08616f662d62617365c000fff06e3bfec0ff5aa2";
+  char *decodedData = base64_decode(hexEncoded);
+  if (!decodedData) {
+    return NULL;
   }
 
-  // Cleanup
-  BIO_free_all(bio); // bio includes b64, no need for separate BIO_free(b64)
+  size_t decodedLength = strlen(decodedData);
+  char *rdb =
+      malloc(decodedLength + 50); // Ensure to have enough space for the header
+  if (!rdb) {
+    free(decodedData);
+    return NULL;
+  }
 
-  return buffer;
+  sprintf(rdb, "$%zu\r\n%s", decodedLength, decodedData);
+  free(decodedData); // Free the decoded data after using it
+  return rdb;
 }

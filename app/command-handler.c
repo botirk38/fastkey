@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "utils/utils.h"
 
 char *handlePing(char **args, int numArgs, bool isSlave) {
   (void)args;    // Unused parameter
@@ -96,9 +97,31 @@ char *handleReplConf(char **args, int numArgs, bool isSlave) {
   return response;
 }
 
+
+
 char* handlePsync(char **args, int numArgs, bool isSlave) {
-  return strdup("+FULLRESYNC 8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb 0\r\n");
+    char* response = "+FULLRESYNC 8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb 0\r\n";
+    char* rdbFile = createRDBFile();
+    
+    if (rdbFile == NULL) {
+        return strdup("-ERROR RDB file creation failed\r\n");
+    }
+
+    char* fullResponse = malloc(strlen(response) + strlen(rdbFile) + 1);
+
+    if (fullResponse == NULL) {
+        return strdup("-ERROR Memory allocation failed\r\n");
+    }
+
+    strcpy(fullResponse, response);
+    strcat(fullResponse, rdbFile);
+
+
+    free(rdbFile);
+
+    return fullResponse;
 }
+
 
 char *handleCommand(const char *command, char **args, int numArg,
                     bool isSlave) {

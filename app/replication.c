@@ -86,6 +86,7 @@ void sendPsync(int sockfd) {
   char *cmd = "*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n";
 
   send(sockfd, cmd, strlen(cmd), 0);
+
 }
 
 bool waitForOk(int sockfd) {
@@ -101,17 +102,7 @@ bool waitForOk(int sockfd) {
   return true;
 }
 
-void sendRDBFile(int sockfd) {
 
-  char* response =  "UkVESVMwMDEx+"
-      "glyZWRpcy12ZXIFNy4yLjD6CnJlZGlzLWJpdHPAQPoFY3RpbWXCbQi8ZfoIdXNlZC1tZW3Cs"
-      "MQQAPoIYW9mLWJhc2XAAP/wbjv+wP9aog==";
-
-  char *decoded = base64_decode(response);
-
-  send(sockfd, decoded, strlen(decoded), 0);
-
-}
 
 bool waitForPong(int sockfd) {
   char buffer[1024];
@@ -167,7 +158,6 @@ bool handShakeSuccess(int sockfd, int port) {
 
   sendPsync(sockfd);
 
-  sendRDBFile(sockfd);
 
   return true;
 }
