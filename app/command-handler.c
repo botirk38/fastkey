@@ -85,6 +85,17 @@ char *handleInfo(char **args, int numArgs, bool isSlave) {
   return response;
 }
 
+char *handleReplConf(char **args, int numArgs, bool isSlave) {
+
+  (void)numArgs;
+  (void)args;
+  (void)isSlave;
+
+  char *response = "+OK\r\n";
+
+  return response;
+}
+
 char *handleCommand(const char *command, char **args, int numArg,
                     bool isSlave) {
   for (int i = 0; commandTable[i].command != NULL; i++) {
@@ -98,10 +109,8 @@ char *handleCommand(const char *command, char **args, int numArg,
 
 // Command table implementation
 Command commandTable[] = {
-    {"PING", handlePing},
-    {"ECHO", handleEcho},
-    {"SET", handleSet},
-    {"GET", handleGet},
-    {"INFO", handleInfo},
+    {"PING", handlePing}, {"ECHO", handleEcho}, {"SET", handleSet},
+    {"GET", handleGet},   {"INFO", handleInfo}, {"REPLCONF", handleReplConf},
     {NULL, NULL} // End of the command table
+    //
 };

@@ -20,6 +20,7 @@ char *handleEcho(char **args, int numArgs, bool isSlave);
 char *handleSet(char **args, int numArgs, bool isSlave);
 char *handleGet(char **args, int numArgs, bool isSlave);
 char* handleInfo(char **args, int numArgs, bool isSlave);
+char* handleReplConf(char **args, int numArgs, bool isSlave);
 
 extern Command commandTable[];
 extern KeyValueStore store;
