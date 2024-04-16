@@ -5,7 +5,7 @@
 #include <string.h>
 
 void initReplicas(Replicas *replicas) {
-  replicas->maxReplicas= 0;
+  replicas->numReplicas= 0;
   replicas->replicas = (Replica *)malloc(MAX_REPLICAS * sizeof(Replica));
 }
 
@@ -15,21 +15,21 @@ void addReplica(Replicas *replicas, int fd, const char *host, int port) {
     return;
   }
 
-  replicas->replicas[replicas->maxReplicas].host = host;
-  replicas->replicas[replicas->maxReplicas].port = port;
-  replicas->replicas[replicas->maxReplicas].fd = fd;
+  replicas->replicas[replicas->numReplicas].host = host;
+  replicas->replicas[replicas->numReplicas].port = port;
+  replicas->replicas[replicas->numReplicas].fd = fd;
   replicas->numReplicas++;
 
   printf("Replica added\n");
 }
 
 void removeReplica(Replicas *replicas, int fd) {
-  for (int i = 0; i < replicas->maxReplicas; i++) {
+  for (int i = 0; i < replicas->numReplicas; i++) {
     if (replicas->replicas[i].fd == fd) {
-      for (int j = i; j < replicas->maxReplicas - 1; j++) {
+      for (int j = i; j < replicas->numReplicas - 1; j++) {
         replicas->replicas[j] = replicas->replicas[j + 1];
       }
-      replicas->maxReplicas--;
+      replicas->numReplicas--;
       printf("Replica removed\n");
       return;
     }
