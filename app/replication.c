@@ -5,6 +5,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h> // for close()
+#include "utils/utils.h"
 
 int establishConnection(const char *host, int port) {
   int sockfd;
@@ -100,6 +101,18 @@ bool waitForOk(int sockfd) {
   return true;
 }
 
+void sendRDBFile(int sockfd) {
+
+  char* response =  "UkVESVMwMDEx+"
+      "glyZWRpcy12ZXIFNy4yLjD6CnJlZGlzLWJpdHPAQPoFY3RpbWXCbQi8ZfoIdXNlZC1tZW3Cs"
+      "MQQAPoIYW9mLWJhc2XAAP/wbjv+wP9aog==";
+
+  char *decoded = base64_decode(response);
+
+  send(sockfd, decoded, strlen(decoded), 0);
+
+}
+
 bool waitForPong(int sockfd) {
   char buffer[1024];
   ssize_t n = recv(sockfd, buffer, sizeof(buffer), 0);
@@ -153,6 +166,8 @@ bool handShakeSuccess(int sockfd, int port) {
   }
 
   sendPsync(sockfd);
+
+  sendRDBFile(sockfd);
 
   return true;
 }

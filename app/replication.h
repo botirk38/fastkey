@@ -10,6 +10,7 @@ void sendPing(int sockfd);
 void sendReplConf(int sockfd, int port);
 void sendReplConfCapaPsync2(int sockfd);
 void sendPsync(int sockfd);
+void sendRDBFile(int sockfd);
 
 bool startReplication(const char *masterHost, int masterPort, int port);
 bool handShakeSuccess(int sockfd, int port);
