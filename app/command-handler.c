@@ -96,6 +96,10 @@ char *handleReplConf(char **args, int numArgs, bool isSlave) {
   return response;
 }
 
+char* handlePsync(char **args, int numArgs, bool isSlave) {
+  return strdup("+FULLRESYNC 8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb 0\r\n");
+}
+
 char *handleCommand(const char *command, char **args, int numArg,
                     bool isSlave) {
   for (int i = 0; commandTable[i].command != NULL; i++) {
@@ -110,7 +114,7 @@ char *handleCommand(const char *command, char **args, int numArg,
 // Command table implementation
 Command commandTable[] = {
     {"PING", handlePing}, {"ECHO", handleEcho}, {"SET", handleSet},
-    {"GET", handleGet},   {"INFO", handleInfo}, {"REPLCONF", handleReplConf},
+    {"GET", handleGet},   {"INFO", handleInfo}, {"REPLCONF", handleReplConf}, {"PSYNC", handlePsync},
     {NULL, NULL} // End of the command table
     //
 };
