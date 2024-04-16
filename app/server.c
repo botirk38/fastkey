@@ -83,6 +83,7 @@ void *deleteExpiredKeysWorker(void *arg) {
   KeyValueStore *store = (KeyValueStore *)arg;
   while (server_running) {
     deleteExpiredKeys(store);
+    sleep(1);
   }
   return NULL;
 }
@@ -185,7 +186,7 @@ void handle_client(int client_fd) {
       printf("Arg %d: %s\n", i, command->args[i]);
     }
 
-    char *response = handleCommand(command->command, command->args);
+    char *response = handleCommand(command->command, command->args, command->numArgs);
 
     printf("Response: %s\n", response);
 

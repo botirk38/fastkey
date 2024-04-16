@@ -9,7 +9,7 @@
 typedef struct {
   const char *key;
   const char *value;
-  int expiry;
+  long long expiry;
 } KeyValue;
 
 typedef struct {
@@ -22,7 +22,7 @@ void initKeyValueStore(KeyValueStore *store);
 void setKeyValue(KeyValueStore *store, const char *key, const char *value, int expiry);
 const char *getKeyValue(KeyValueStore *store, const char *key);
 void deleteKeyValue(KeyValueStore *store, int index);
-int currentTime();
+long long currentTime();
 void deleteExpiredKeys(KeyValueStore *store);
 void freeKeyValueStore(KeyValueStore *store);
 

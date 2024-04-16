@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/time.h>
 #include <time.h>
 
 void initKeyValueStore(KeyValueStore *keyValueStore) {
@@ -12,7 +13,12 @@ void initKeyValueStore(KeyValueStore *keyValueStore) {
       (KeyValue *)malloc(MAX_STORE_LENGTH * sizeof(KeyValue));
 }
 
-int currentTime() { return (int)time(NULL); }
+long long currentTime() {
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
+  return (tv.tv_sec * 1000LL) +
+         (tv.tv_usec / 1000LL); // Convert sec to ms and usec to ms
+}
 
 void setKeyValue(KeyValueStore *store, const char *key, const char *value,
                  int expiry) {
@@ -27,33 +33,32 @@ void setKeyValue(KeyValueStore *store, const char *key, const char *value,
     return;
   }
 
+  long long expiryTime =
+      (expiry == 0)
+          ? 0
+          : currentTime() + expiry; // expiry should be in milliseconds
+
   store->store[store->size].key = key;
   store->store[store->size].value = value;
-  store->store[store->size].expiry = expiry;
+  store->store[store->size].expiry = expiryTime;
   store->size++;
 
   printf("Key set\n");
 }
 
 const char *getKeyValue(KeyValueStore *store, const char *key) {
-
   for (int i = 0; i < store->size; i++) {
-
     if (strcmp(store->store[i].key, key) == 0) {
+      if (store->store[i].expiry == 0 ||
+          store->store[i].expiry >= currentTime()) {
 
-      if (store->store[i].expiry == 0) {
         return store->store[i].value;
       } else {
-        if (store->store[i].expiry > currentTime()) {
-          return store->store[i].value;
-        } else {
-          deleteKeyValue(store, i);
-          return "Key has expired";
-        }
+        deleteKeyValue(store, i); // Delete expired key
+        return "Key has expired";
       }
     }
   }
-
   return "Key not found";
 }
 
