@@ -81,6 +81,12 @@ void sendReplConfCapaPsync2(int sockfd) {
   send(sockfd, cmd, strlen(cmd), 0);
 }
 
+void sendPsync(int sockfd) {
+  char *cmd = "*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n";
+
+  send(sockfd, cmd, strlen(cmd), 0);
+}
+
 bool waitForOk(int sockfd) {
   char buffer[1024];
   ssize_t n = recv(sockfd, buffer, sizeof(buffer), 0);
@@ -113,6 +119,18 @@ bool startReplication(const char *masterHost, int masterPort, int port) {
     return false;
   }
 
+  if (!handShakeSuccess(sockfd, port)) {
+    closeConnection(sockfd);
+    return false;
+  }
+
+  // Placeholder to keep the connection for further steps
+  // closeConnection(sockfd);
+  return true;
+}
+
+bool handShakeSuccess(int sockfd, int port) {
+
   sendPing(sockfd);
 
   if (!waitForPong(sockfd)) {
@@ -134,14 +152,8 @@ bool startReplication(const char *masterHost, int masterPort, int port) {
     return false;
   }
 
-  // Assuming future steps would also use sockfd
-  // if (!handshakeSuccess(sockfd)) {
-  //     closeConnection(sockfd);
-  //     return false;
-  // }
+  sendPsync(sockfd);
 
-  // Placeholder to keep the connection for further steps
-  // closeConnection(sockfd);
   return true;
 }
 

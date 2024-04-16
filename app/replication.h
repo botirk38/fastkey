@@ -9,11 +9,14 @@ void closeConnection(int sockfd);
 void sendPing(int sockfd);
 void sendReplConf(int sockfd, int port);
 void sendReplConfCapaPsync2(int sockfd);
+void sendPsync(int sockfd);
 
 bool startReplication(const char *masterHost, int masterPort, int port);
+bool handShakeSuccess(int sockfd, int port);
 
 bool waitForOk(int sockfd);
 bool waitForPong(int sockfd);
+
 
 
 #endif // REPLICATION_H
