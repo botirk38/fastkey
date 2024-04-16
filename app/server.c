@@ -2,6 +2,7 @@
 #include "command-handler.h"
 #include "config.h"
 #include "parser.h"
+#include "replication.h"
 #include "utils/KeyValueStore.h"
 #include <errno.h>
 #include <netinet/in.h>
@@ -56,6 +57,15 @@ int main(int argc, char *argv[]) {
 
   init_thread_pool();
   initKeyValueStore(&store);
+
+  if (config.isSlave) {
+
+    if (startReplication(config.masterHost, config.masterPort) == false) {
+      cleanup(server_fd);
+      cleanup_thread_pool();
+      return 1;
+    }
+  }
 
   pthread_t accept_thread;
   if (pthread_create(&accept_thread, NULL, accept_connections, &server_fd) !=
@@ -191,8 +201,8 @@ void handle_client(int client_fd) {
       printf("Arg %d: %s\n", i, command->args[i]);
     }
 
-    char *response =
-        handleCommand(command->command, command->args, command->numArgs, config.isSlave);
+    char *response = handleCommand(command->command, command->args,
+                                   command->numArgs, config.isSlave);
 
     printf("Response: %s\n", response);
 
