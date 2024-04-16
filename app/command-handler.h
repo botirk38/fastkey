@@ -2,9 +2,10 @@
 #define COMMAND_HANDLER_H
 
 #include "utils/KeyValueStore.h"
+#include <stdbool.h>
 
 // Function pointer type for handling commands with multiple arguments.
-typedef char *(*CommandHandler)(char **args, int numArgs);
+typedef char *(*CommandHandler)(char **args, int numArgs, bool isSlave);
 
 // Struct to represent a command and its associated handler.
 typedef struct {
@@ -12,12 +13,13 @@ typedef struct {
   CommandHandler handler;
 } Command;
 
-char *handleCommand(const char *command, char **args, int numArgs);
+char *handleCommand(const char *command, char **args, int numArgs, bool isSlave);
 
-char *handlePing(char **args, int numArgs);
-char *handleEcho(char **args, int numArgs);
-char *handleSet(char **args, int numArgs);
-char *handleGet(char **args, int numArgs);
+char *handlePing(char **args, int numArgs, bool isSlave);
+char *handleEcho(char **args, int numArgs, bool isSlave);
+char *handleSet(char **args, int numArgs, bool isSlave);
+char *handleGet(char **args, int numArgs, bool isSlave);
+char* handleInfo(char **args, int numArgs, bool isSlave);
 
 extern Command commandTable[];
 extern KeyValueStore store;

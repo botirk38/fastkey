@@ -3,13 +3,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-char *handlePing(char **args, int numArgs) {
+char *handlePing(char **args, int numArgs, bool isSlave) {
   (void)args;    // Unused parameter
   (void)numArgs; // Unused parameter
   return strdup("+PONG\r\n");
 }
 
-char *handleEcho(char **args, int numArgs) {
+char *handleEcho(char **args, int numArgs, bool isSlave) {
   (void)numArgs; // Unused parameter
   if (args == NULL || args[0] == NULL) {
     return strdup("-ERROR No argument provided\r\n");
@@ -23,7 +23,7 @@ char *handleEcho(char **args, int numArgs) {
   return response;
 }
 
-char *handleSet(char **args, int numArgs) {
+char *handleSet(char **args, int numArgs, bool isSlave) {
   if (args[0] == NULL || args[1] == NULL) {
     return strdup("-ERROR Insufficient arguments\r\n");
   }
@@ -42,7 +42,7 @@ char *handleSet(char **args, int numArgs) {
   return strdup("+OK\r\n");
 }
 
-char *handleGet(char **args, int numArgs) {
+char *handleGet(char **args, int numArgs, bool isSlave) {
 
   (void)numArgs; // Unused parameter
 
@@ -65,11 +65,32 @@ char *handleGet(char **args, int numArgs) {
   return response;
 }
 
-char *handleCommand(const char *command, char **args, int numArg) {
+char *handleInfo(char **args, int numArgs, bool isSlave) {
+  (void)numArgs;
+  (void)args;
+
+  char *role = isSlave ? "slave" : "master";
+  char *master_repl_id = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb";
+  int master_repl_offset = 0;
+
+  char info[256];
+
+  sprintf(info, "role:%s\r\nmaster_replid:%s\r\nmaster_repl_offset:%d", role,
+          master_repl_id, master_repl_offset);
+
+  static char response[256];
+
+  sprintf(response, "$%lu\r\n%s\r\n", strlen(info), info);
+
+  return response;
+}
+
+char *handleCommand(const char *command, char **args, int numArg,
+                    bool isSlave) {
   for (int i = 0; commandTable[i].command != NULL; i++) {
     if (strcmp(command, commandTable[i].command) == 0) {
       printf("Handling command %s\n", command);
-      return commandTable[i].handler(args, numArg);
+      return commandTable[i].handler(args, numArg, isSlave);
     }
   }
   return strdup("-ERROR Unknown command\r\n");
@@ -81,5 +102,6 @@ Command commandTable[] = {
     {"ECHO", handleEcho},
     {"SET", handleSet},
     {"GET", handleGet},
+    {"INFO", handleInfo},
     {NULL, NULL} // End of the command table
 };

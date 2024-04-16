@@ -29,13 +29,14 @@ void *deleteExpiredKeysWorker(void *arg);
 
 volatile sig_atomic_t server_running = 1;
 KeyValueStore store;
+Config config;
 
 int main(int argc, char *argv[]) {
 
   setbuf(stdout, NULL);
   printf("Logs from your program will appear here!\n");
 
-  Config config = parse_cli_args(argc, argv);
+  config = parse_cli_args(argc, argv);
 
   int server_fd = create_server_socket();
   if (server_fd == -1)
@@ -191,7 +192,7 @@ void handle_client(int client_fd) {
     }
 
     char *response =
-        handleCommand(command->command, command->args, command->numArgs);
+        handleCommand(command->command, command->args, command->numArgs, false);
 
     printf("Response: %s\n", response);
 
