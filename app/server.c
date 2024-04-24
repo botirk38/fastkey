@@ -16,6 +16,7 @@
 #include <unistd.h>
 
 #define BUFFER_SIZE 1024
+#define NEWLINE_CHARACTERS_COMMAND 7
 
 int create_server_socket();
 int bind_to_port(int server_fd, int port);
@@ -163,18 +164,6 @@ void *accept_connections(void *arg) {
     int client_fd =
         accept(server_fd, (struct sockaddr *)&client_addr, &client_addr_len);
 
-    if(setsockopt(client_fd, SOL_SOCKET, SO_REUSEADDR, &client_fd, sizeof(client_fd)) < 0) {
-      perror("SO_REUSEADDR failed");
-      close(client_fd);
-      continue;
-    }
-
-    if(setsockopt(client_fd, SOL_SOCKET, SO_REUSEPORT, &client_fd, sizeof(client_fd)) < 0) {
-      perror("SO_REUSEPORT failed");
-      close(client_fd);
-      continue;
-    }
-
     if (client_fd == -1) {
       if (errno == EINTR) {
         continue; // Interrupted by signal
@@ -238,7 +227,7 @@ void handle_client(int client_fd) {
 
       printf("Replicas: %d\n", replicas.numReplicas);
 
-      if (isWriteCommand(command->command) && replicas.numReplicas > 0) {
+      if ((isWriteCommand(command->command)) && replicas.numReplicas > 0) {
         printf("Propagating command to replicas\n");
         propagateCommandToReplicas(&replicas, buffer);
       }
@@ -246,121 +235,109 @@ void handle_client(int client_fd) {
 
     printf("Response: %s\n", response);
 
-    send(client_fd, response, strlen(response), 0);
+    if (send(client_fd, response, strlen(response), 0) == -1) {
+      perror("Send failed \n");
+      return;
+    }
   }
   printf("Closing client connection\n");
   close(client_fd);
 }
 
-void handle_master(int master_fd) {
-
-  while (1) {
-    char buffer[BUFFER_SIZE];
-    char *bufferStr = NULL;
-    size_t bufferStrLength = 0;
-    ssize_t n = 0;
-
-    if (master_fd == -1) {
-      fprintf(stderr, "Master connection is closed\n");
-      return;
-    }
-
-    bufferStr = malloc(1); // Initially allocate buffer string
-    if (!bufferStr) {
-      perror("Failed to allocate memory");
-      return;
-    }
-    bufferStr[0] = '\0'; // Initialize empty C-string
-
-    while ((n = recv(master_fd, buffer, sizeof(buffer) - 1, 0)) > 0) {
-      buffer[n] = '\0'; // Null-terminate the string
-
-      // Append new data to buffer string
-      char *newBufferStr = realloc(bufferStr, bufferStrLength + n + 1);
-      if (!newBufferStr) {
-        perror("Failed to allocate memory");
-        free(bufferStr);
-        return;
-      }
-      bufferStr = newBufferStr;
-      memcpy(bufferStr + bufferStrLength, buffer, n);
-      bufferStrLength += n;
-      bufferStr[bufferStrLength] = '\0';
-
-      size_t pos = 0;
-      bool foundCommand = false;
-      while (true) {
-        size_t commandStart = pos;
-        while (commandStart < bufferStrLength &&
-               bufferStr[commandStart] != '*') {
-          commandStart++;
-        }
-
-        if (commandStart >= bufferStrLength)
-          break;
-
-        size_t commandEnd = commandStart;
-        while (commandEnd < bufferStrLength &&
-               !(bufferStr[commandEnd] == '\r' &&
-                 bufferStr[commandEnd + 1] == '\n')) {
-          commandEnd++;
-        }
-
-        if (commandEnd >= bufferStrLength || bufferStr[commandEnd] != '\r')
-          break;
-
-        foundCommand = true;
-
-        // Process the command excluding "\r\n"
-        
-        printf("Buffer: %s\n", bufferStr + commandStart);
-
-        RespCommand *command = parseCommand(bufferStr + commandStart);
-
-        printf("Command: %s\n", command->command);
-
-        for (int i = 0; i < command->numArgs; i++) {
-          printf("Arg %d: %s\n", i, command->args[i]);
-        }
-
-        char* response;
-
-        if(command->command != NULL) {
-
-        response = handleCommand(command->command, command->args,
-                                       command->numArgs, true);
-
-        } else {
-          response = NULL;
-        } 
-
-        printf("Response: %s\n", response);
-
-        if (strcmp(command->command, "REPLCONF") == 0 &&
-            strcmp(command->args[0], "GETACK") == 0 && response != NULL) {
-          printf("Received ACK\n");
-          send(master_fd, response, strlen(response), 0);
-        }
-
-        // Prepare for the next iteration
-        pos = commandEnd + 2; // Move past the "\r\n" of the current command
-      }
-
-      if (foundCommand && pos > 0) {
-        memmove(bufferStr, bufferStr + pos, bufferStrLength - pos);
-        bufferStrLength -= pos;
-        bufferStr = realloc(bufferStr, bufferStrLength + 1);
-        if (!bufferStr) {
-          perror("Failed to allocate memory");
-          return;
-        }
-        bufferStr[bufferStrLength] = '\0';
-      }
-    }
-
-    free(bufferStr);
-    close(master_fd);
+char *substr(const char *input, int start, int end, int input_length) {
+  if (input == NULL) {
+    fprintf(stderr, "Invalid input string.\n");
+    return NULL;
   }
+
+  if (start < 0 || start >= input_length || end < start || end > input_length) {
+    fprintf(stderr, "Start or end position out of bounds.\n");
+    return NULL;
+  }
+
+  int length = end - start; // Calculate the length from start to end
+  char *result = malloc(length + 1);
+  if (result == NULL) {
+    perror("Failed to allocate memory for substring");
+    return NULL;
+  }
+
+  memcpy(result, input + start, length);
+  result[length] = '\0'; // Ensure the substring is null-terminated
+
+  return result;
+}
+
+void handle_master(int master_fd) {
+  char buffer[BUFFER_SIZE];
+  ssize_t n = 0;
+
+  if (master_fd == -1) {
+    fprintf(stderr, "Master connection is closed\n");
+    return;
+  }
+
+  printf("Master fd: %d\n", master_fd);
+
+  while ((n = recv(master_fd, buffer, BUFFER_SIZE - 1, 0)) > 0) {
+    buffer[n] = '\0'; // Null-terminate the string
+    printf("Buffer %s\n", buffer);
+    size_t start = 0;
+
+    while (start < n) {
+      if (buffer[start] != '*') {
+        printf("Finding Start: %c\n", buffer[start]);
+        start++;
+        continue; // skip until finding the start of a command
+      }
+
+      size_t end = start + 1;
+      // Find the end of the current command
+      while (end < n && buffer[end] != '*') {
+        printf("Finding End: %c\n", buffer[end]);
+        end++;
+      }
+      if (end < n || buffer[end - 1] == '\n') {
+        RespCommand *command = parseCommand(buffer + start);
+
+        if (strcmp(command->command, "REPLCONF") != 0 &&
+            strcmp(command->args[0], "GETACK") != 0) {
+
+          updateOffsetForCommand(buffer + start);
+        }
+
+        if (command) {
+          printf("Command: %s\n", command->command);
+
+          char *result = handleCommand(command->command, command->args,
+                                       command->numArgs, 1);
+          if (result) {
+            printf("Result: %s\n", result);
+
+            if (strcmp(command->command, "REPLCONF") == 0 &&
+                strcmp(command->args[0], "GETACK") == 0) {
+
+              if (send(master_fd, result, strlen(result), 0) == -1) {
+                fprintf(stderr, "Send failed to master");
+              }
+              break;
+            }
+            free(result); // Assume handleCommand allocates result
+          }
+        }
+        start = end;
+      } else {
+        // Should not reach here if all commands are complete
+        break;
+      }
+    }
+  }
+
+  if (n < 0) {
+    perror("Receive failed");
+  }
+
+  close(master_fd); // Close the socket
 }
 
 void *worker_func(void *arg) {

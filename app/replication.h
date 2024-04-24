@@ -17,7 +17,7 @@ void sendRDBFile(int sockfd);
 
 bool startReplication(const char *masterHost, int masterPort, int port);
 bool handShakeSuccess(int sockfd, int port);
-
+void* skipRDBAndFullResync(void* args);
 bool waitForOk(int sockfd);
 bool waitForPong(int sockfd);
 

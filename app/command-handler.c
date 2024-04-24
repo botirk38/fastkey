@@ -6,12 +6,17 @@
 
 static size_t offset = 0;
 
+void updateOffsetForCommand(const char *command) {
+  size_t commandLength = strlen(command);
+  offset += commandLength; // Add the length of the command string to the offset
+}
+
 char *handlePing(char **args, int numArgs, bool isSlave) {
   (void)args;    // Unused parameter
   (void)numArgs; // Unused parameter
 
   if (isSlave) {
-    offset += 14;
+    printf("Calculating offset \n");
   }
   return strdup("+PONG\r\n");
 }
@@ -38,13 +43,8 @@ char *handleSet(char **args, int numArgs, bool isSlave) {
   const char *value = args[1];
   int expiry = 0;
 
-  if (isSlave) {
-    offset += 25 + strlen(key) + strlen(value);
-  }
-
   if (numArgs > 3) {
     expiry = atoi(args[3]);
-    offset += 14 + strlen(args[3]);
   }
 
   // Check for expiry argument which is optional
@@ -108,14 +108,12 @@ char *handleReplConf(char **args, int numArgs, bool isSlave) {
     sprintf(responseBuffer,
             "*3\r\n$8\r\nREPLCONF\r\n$3\r\nACK\r\n$%zu\r\n%zu\r\n",
             digitsInNumber(offset), offset);
+    printf("Digits in num %lu\n", digitsInNumber(offset));
+    printf("Offset %lu\n", offset);
 
     response = strdup(responseBuffer);
 
   } else {
-
-    if (isSlave) {
-      offset += 37;
-    }
 
     response = "+OK\r\n";
   }

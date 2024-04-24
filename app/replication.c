@@ -1,6 +1,7 @@
 #include "replication.h"
 #include "utils/utils.h"
 #include <arpa/inet.h> // for htons(), inet_pton()
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -137,12 +138,12 @@ bool waitForPong(int sockfd) {
     return false;
   }
 
-
   return true;
 }
 
 bool startReplication(const char *masterHost, int masterPort, int port) {
   master_fd = establishConnection(masterHost, masterPort);
+
   if (master_fd < 0) {
     return false;
   }
@@ -156,6 +157,9 @@ bool startReplication(const char *masterHost, int masterPort, int port) {
 }
 
 bool handShakeSuccess(int sockfd, int port) {
+
+  char buffer[1024];
+  pthread_t thread_id;
 
   sendPing(sockfd);
 
@@ -180,6 +184,56 @@ bool handShakeSuccess(int sockfd, int port) {
 
   sendPsync(sockfd);
 
-  return true;
+  if (pthread_create(&thread_id, NULL, skipRDBAndFullResync, (void *)&sockfd) !=
+      0) {
+    perror("Failed to create thread");
+    return false;
+  }
+
+  void *result;
+  if (pthread_join(thread_id, &result) != 0) {
+    perror("Failed to join thread");
+    return false;
+  }
+
+  if (result == (void *)true) {
+    printf("Successfully skipped RDB and full resync.\n");
+    return true;
+  } else {
+    printf("Failed to skip RDB and full resync.\n");
+    return false;
+  }
+
 }
 
+void *skipRDBAndFullResync(void *sockfd_ptr) {
+  int sockfd =
+      *(int *)sockfd_ptr; // Cast and dereference the pointer to get the sockfd
+  char c = 0;
+  int rdb_len = 0; // Initialize rdb_len to avoid using uninitialized value
+
+  while (recv(sockfd, &c, 1, 0) > 0 && c != '\n')
+    ;
+
+  if (recv(sockfd, &c, 1, 0) <= 0 || c != '$') {
+    closeConnection(sockfd);
+    return (void *)false; // Return false as a void pointer
+  }
+
+  while (recv(sockfd, &c, 1, 0) > 0 && c != '\r') {
+    if (c >= '0' && c <= '9') {
+      rdb_len = rdb_len * 10 + (c - '0');
+    } else {
+      closeConnection(sockfd);
+      return (void *)false;
+    }
+  }
+
+  // Skipping the RDB data
+  int bytesToDiscard = rdb_len + 1;
+  char discardBuffer[1024];
+  recv(sockfd, discardBuffer, bytesToDiscard, 0);
+  printf("Discarded buffer: %s\n", discardBuffer);
+
+  return (void *)true; // Return true as a void pointer
+}
