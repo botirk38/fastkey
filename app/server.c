@@ -300,8 +300,7 @@ void handle_master(int master_fd) {
       if (end < n || buffer[end - 1] == '\n') {
         RespCommand *command = parseCommand(buffer + start);
 
-        if (strcmp(command->command, "REPLCONF") != 0 &&
-            strcmp(command->args[0], "GETACK") != 0) {
+        if (strcmp(command->args[0], "GETACK") != 0) {
 
           updateOffsetForCommand(buffer + start);
         }
