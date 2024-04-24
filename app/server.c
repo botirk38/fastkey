@@ -305,9 +305,7 @@ void handle_master(int master_fd) {
 
           char *result = handleCommand(command->command, command->args,
                                        command->numArgs, 1);
-          if (strcmp(command->args[0], "GETACK") != 0) {
-            updateOffsetForCommand(buffer + start);
-          }
+          updateOffsetForCommand(buffer + start);
 
           if (result) {
             printf("Result: %s\n", result);
