@@ -300,11 +300,6 @@ void handle_master(int master_fd) {
       if (end < n || buffer[end - 1] == '\n') {
         RespCommand *command = parseCommand(buffer + start);
 
-        if (strcmp(command->args[0], "GETACK") != 0) {
-
-          updateOffsetForCommand(buffer + start);
-        }
-
         if (command) {
           printf("Command: %s\n", command->command);
 
@@ -321,6 +316,8 @@ void handle_master(int master_fd) {
               }
               break;
             }
+            updateOffsetForCommand(buffer + start);
+
             free(result); // Assume handleCommand allocates result
           }
         }
