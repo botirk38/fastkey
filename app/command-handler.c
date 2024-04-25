@@ -125,8 +125,15 @@ char *handleReplConf(char **args, int numArgs, bool isSlave) {
 
 char *handleWait(char **args, int numArgs, bool isSlave) {
 
-  char *response = ":0\r\n";
+  printf("Num Replicas %s\n", args[2]);
 
+  char *response = malloc(30);
+
+  if (response == NULL) {
+    return strdup("-ERROR Memory allocation failed\r\n");
+  }
+
+  snprintf(response, 30, ":%s\r\n", args[2]);
   return response;
 }
 

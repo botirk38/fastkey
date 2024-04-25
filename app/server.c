@@ -209,7 +209,26 @@ void handle_client(int client_fd) {
 
     RespCommand *command = parseCommand(buffer);
 
+    if (!command) {
+      printf("Failed to parse command\n");
+      continue;
+    }
+
     printf("Command in Master: %s\n", command->command);
+
+    if (strcmp(command->command, "WAIT") == 0) {
+
+      // Allocate memory for the string representation of the integer
+      char *replicaCountStr = malloc(10); // Enough to hold all digits of an int
+      if (replicaCountStr == NULL) {
+        perror("Failed to allocate memory for replica count string");
+        return; // or handle error more appropriately
+      }
+      // Convert integer to string
+      snprintf(replicaCountStr, 10, "%d", replicas.numReplicas);
+      command->args[2] = replicaCountStr;
+      command->numArgs++;
+    }
 
     for (int i = 0; i < command->numArgs; i++) {
       printf("Arg %d: %s\n", i, command->args[i]);
@@ -277,7 +296,6 @@ void handle_master(int master_fd) {
     return;
   }
 
-
   while ((n = recv(master_fd, buffer, BUFFER_SIZE - 1, 0)) > 0) {
     buffer[n] = '\0'; // Null-terminate the string
     size_t start = 0;
@@ -302,7 +320,7 @@ void handle_master(int master_fd) {
                                        command->numArgs, 1);
 
           if (result) {
-            printf("Result: %s\n", result); 
+            printf("Result: %s\n", result);
 
             if (strcmp(command->command, "REPLCONF") == 0 &&
                 strcmp(command->args[0], "GETACK") == 0) {

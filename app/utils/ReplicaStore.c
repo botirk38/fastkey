@@ -9,6 +9,11 @@ void initReplicas(Replicas *replicas) {
   replicas->replicas = (Replica *)malloc(MAX_REPLICAS * sizeof(Replica));
 }
 
+bool isReplicasEmpty(Replicas *replicas) {
+    
+  return replicas ->numReplicas >0;
+}
+
 void addReplica(Replicas *replicas, int fd, const char *host, int port) {
   if (replicas->maxReplicas == MAX_REPLICAS) {
     printf("Max replicas reached\n");
