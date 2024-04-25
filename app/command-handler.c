@@ -7,17 +7,17 @@
 static size_t offset = 0;
 
 void updateOffsetForCommand(const char *command) {
+  printf("Calculating offset \n");
   size_t commandLength = strlen(command);
   offset += commandLength; // Add the length of the command string to the offset
+  printf("Offset %zu\n", offset);
 }
 
 char *handlePing(char **args, int numArgs, bool isSlave) {
   (void)args;    // Unused parameter
   (void)numArgs; // Unused parameter
 
-  if (isSlave) {
-    printf("Calculating offset \n");
-  }
+  offset += 14;
   return strdup("+PONG\r\n");
 }
 
@@ -42,9 +42,11 @@ char *handleSet(char **args, int numArgs, bool isSlave) {
   const char *key = args[0];
   const char *value = args[1];
   int expiry = 0;
+  offset += 25 + strlen(key) + strlen(value);
 
   if (numArgs > 3) {
     expiry = atoi(args[3]);
+    offset += 14 + strlen(args[3]);
   }
 
   // Check for expiry argument which is optional
@@ -108,8 +110,6 @@ char *handleReplConf(char **args, int numArgs, bool isSlave) {
     sprintf(responseBuffer,
             "*3\r\n$8\r\nREPLCONF\r\n$3\r\nACK\r\n$%zu\r\n%zu\r\n",
             digitsInNumber(offset), offset);
-    printf("Digits in num %lu\n", digitsInNumber(offset));
-    printf("Offset %lu\n", offset);
 
     response = strdup(responseBuffer);
 
@@ -117,7 +117,16 @@ char *handleReplConf(char **args, int numArgs, bool isSlave) {
 
     response = "+OK\r\n";
   }
+  offset += 37;
+
   printf("Response for REPLCONF: %s\n", response);
+  return response;
+}
+
+char *handleWait(char **args, int numArgs, bool isSlave) {
+
+  char *response = ":0\r\n";
+
   return response;
 }
 
@@ -172,6 +181,7 @@ Command commandTable[] = {
     {"REPLCONF", handleReplConf},
     {"PSYNC", handlePsync},
     {"ACK", handleAck},
+    {"WAIT", handleWait},
     {NULL, NULL} // End of the command table
                  //
 };

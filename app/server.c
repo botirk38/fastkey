@@ -277,16 +277,13 @@ void handle_master(int master_fd) {
     return;
   }
 
-  printf("Master fd: %d\n", master_fd);
 
   while ((n = recv(master_fd, buffer, BUFFER_SIZE - 1, 0)) > 0) {
     buffer[n] = '\0'; // Null-terminate the string
-    printf("Buffer %s\n", buffer);
     size_t start = 0;
 
     while (start < n) {
       if (buffer[start] != '*') {
-        printf("Finding Start: %c\n", buffer[start]);
         start++;
         continue; // skip until finding the start of a command
       }
@@ -294,21 +291,18 @@ void handle_master(int master_fd) {
       size_t end = start + 1;
       // Find the end of the current command
       while (end < n && buffer[end] != '*') {
-        printf("Finding End: %c\n", buffer[end]);
         end++;
       }
       if (end < n || buffer[end - 1] == '\n') {
         RespCommand *command = parseCommand(buffer + start);
 
         if (command) {
-          printf("Command: %s\n", command->command);
 
           char *result = handleCommand(command->command, command->args,
                                        command->numArgs, 1);
-          updateOffsetForCommand(buffer + start);
 
           if (result) {
-            printf("Result: %s\n", result);
+            printf("Result: %s\n", result); 
 
             if (strcmp(command->command, "REPLCONF") == 0 &&
                 strcmp(command->args[0], "GETACK") == 0) {
@@ -316,12 +310,15 @@ void handle_master(int master_fd) {
               if (send(master_fd, result, strlen(result), 0) == -1) {
                 fprintf(stderr, "Send failed to master");
               }
+
+              printf("Sent to master");
+
               break;
             }
-
             free(result); // Assume handleCommand allocates result
           }
         }
+
         start = end;
       } else {
         // Should not reach here if all commands are complete
