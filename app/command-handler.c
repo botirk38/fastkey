@@ -1,23 +1,29 @@
 #include "command-handler.h"
 #include "utils/utils.h"
+#include <errno.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/time.h>
+#include <unistd.h>
 
-static size_t offset = 0;
+int replicasProcessed;
+size_t offset = 0;
+size_t masterOffset = 0;
 
-void updateOffsetForCommand(const char *command) {
-  printf("Calculating offset \n");
-  size_t commandLength = strlen(command);
-  offset += commandLength; // Add the length of the command string to the offset
-  printf("Offset %zu\n", offset);
-}
+// Global mutex and condition variable
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
 
 char *handlePing(char **args, int numArgs, bool isSlave) {
   (void)args;    // Unused parameter
   (void)numArgs; // Unused parameter
 
-  offset += 14;
+  if (isSlave) {
+    offset += 14;
+  }
+
   return strdup("+PONG\r\n");
 }
 
@@ -42,11 +48,22 @@ char *handleSet(char **args, int numArgs, bool isSlave) {
   const char *key = args[0];
   const char *value = args[1];
   int expiry = 0;
-  offset += 25 + strlen(key) + strlen(value);
+
+  if (isSlave) {
+    offset += 25 + strlen(key) + strlen(value);
+  } else {
+    masterOffset += 25 + strlen(key) + strlen(value);
+  }
 
   if (numArgs > 3) {
     expiry = atoi(args[3]);
-    offset += 14 + strlen(args[3]);
+
+    if (isSlave) {
+      offset += 14 + strlen(args[3]);
+    } else {
+
+      masterOffset += 14 + strlen(args[3]);
+    }
   }
 
   // Check for expiry argument which is optional
@@ -113,28 +130,91 @@ char *handleReplConf(char **args, int numArgs, bool isSlave) {
 
     response = strdup(responseBuffer);
 
-  } else {
+  } else if (numArgs == 2 && strcmp(args[0], "ACK") == 0 && !isSlave) {
+
+    printf("Received ACK in Command Handler\n");
+
+    int replicasOffset = atoi(args[1]);
+    printf("Replicas Offset: %d\n", replicasOffset);
+    printf("Offset: %zu\n", offset);
+    printf("Master Offset: %zu\n", masterOffset);
+
+    if (replicasOffset >= masterOffset) {
+
+      ackReceived();
+    }
+
+    response = "+OK\r\n";
+
+  }
+
+  else {
 
     response = "+OK\r\n";
   }
-  offset += 37;
+
+  if (isSlave) {
+    offset += 37;
+  }
 
   printf("Response for REPLCONF: %s\n", response);
   return response;
 }
 
+int getCurrentTimeMillis() {
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
+  return tv.tv_sec * 1000 + tv.tv_usec / 1000;
+}
 char *handleWait(char **args, int numArgs, bool isSlave) {
-
-  printf("Num Replicas %s\n", args[2]);
+  if (numArgs < 3) {
+    return strdup("-ERROR Insufficient arguments\r\n");
+  }
 
   char *response = malloc(30);
-
   if (response == NULL) {
     return strdup("-ERROR Memory allocation failed\r\n");
   }
 
-  snprintf(response, 30, ":%s\r\n", args[2]);
-  return response;
+  int minimumReplicas = atoi(args[0]);
+  int timeout = atoi(args[1]);
+  int expectedReplicas = atoi(args[2]);
+  replicasProcessed = 0; // Reset the count of processed replicas
+
+  if (masterOffset == 0) {
+    snprintf(response, 30, ":%d\r\n", expectedReplicas);
+    return response;
+  }
+
+  pthread_mutex_lock(&mutex);
+  struct timespec ts;
+  clock_gettime(CLOCK_REALTIME, &ts);
+  ts.tv_sec += timeout / 1000;
+  ts.tv_nsec += (timeout % 1000) * 1000000;
+
+  // Wait until the number of replicasProcessed reaches the minimum required or
+  // timeout occurs
+  while (replicasProcessed < expectedReplicas) {
+    int res = pthread_cond_timedwait(&cond, &mutex, &ts);
+    if (res == ETIMEDOUT) {
+      break;
+    }
+  }
+
+  snprintf(response, 30, ":%d\r\n", replicasProcessed);
+
+  pthread_mutex_unlock(&mutex);
+
+  return response; // Return the number of replicas that have processed the
+                   // command
+}
+
+void ackReceived() {
+  pthread_mutex_lock(&mutex);
+  replicasProcessed++;
+  printf("Replicas processed Increased: %d\n", replicasProcessed);
+  pthread_cond_signal(&cond); // Signal that an ack was received
+  pthread_mutex_unlock(&mutex);
 }
 
 char *handlePsync(char **args, int numArgs, bool isSlave) {
@@ -159,14 +239,6 @@ char *handlePsync(char **args, int numArgs, bool isSlave) {
   return fullResponse;
 }
 
-char *handleAck(char **args, int numArgs, bool isSlave) {
-  (void)args;
-  (void)numArgs;
-  (void)isSlave;
-
-  return "+OK\r\n";
-}
-
 char *handleCommand(const char *command, char **args, int numArg,
                     bool isSlave) {
   for (int i = 0; commandTable[i].command != NULL; i++) {
@@ -187,7 +259,6 @@ Command commandTable[] = {
     {"INFO", handleInfo},
     {"REPLCONF", handleReplConf},
     {"PSYNC", handlePsync},
-    {"ACK", handleAck},
     {"WAIT", handleWait},
     {NULL, NULL} // End of the command table
                  //

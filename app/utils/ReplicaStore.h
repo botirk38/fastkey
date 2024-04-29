@@ -22,6 +22,9 @@ typedef struct {
 
 } Replicas;
 
+static Replicas replicas;
+
+
 
 void initReplicas(Replicas *replicas);
 void addReplica(Replicas *replicas, int fd, const char *host, int port);

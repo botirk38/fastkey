@@ -34,7 +34,6 @@ void handle_master(int sockfd);
 volatile sig_atomic_t server_running = 1;
 KeyValueStore store;
 Config config;
-Replicas replicas;
 
 int main(int argc, char *argv[]) {
 
@@ -199,7 +198,6 @@ void handle_client(int client_fd) {
         printf("Client closed connection\n");
       } else
         perror("Receive failed");
-      close(client_fd);
       return;
     }
 
@@ -218,13 +216,15 @@ void handle_client(int client_fd) {
 
     if (strcmp(command->command, "WAIT") == 0) {
 
+      propagateCommandToReplicas(
+          &replicas, "*3\r\n$8\r\nREPLCONF\r\n$6\r\nGETACK\r\n$1\r\n*\r\n");
+
       // Allocate memory for the string representation of the integer
       char *replicaCountStr = malloc(10); // Enough to hold all digits of an int
       if (replicaCountStr == NULL) {
         perror("Failed to allocate memory for replica count string");
         return; // or handle error more appropriately
       }
-      // Convert integer to string
       snprintf(replicaCountStr, 10, "%d", replicas.numReplicas);
       command->args[2] = replicaCountStr;
       command->numArgs++;

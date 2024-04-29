@@ -3,6 +3,7 @@
 
 #include "utils/KeyValueStore.h"
 #include <stdbool.h>
+#include <stddef.h>
 
 // Function pointer type for handling commands with multiple arguments.
 typedef char *(*CommandHandler)(char **args, int numArgs, bool isSlave);
@@ -12,6 +13,14 @@ typedef struct {
   const char *command;
   CommandHandler handler;
 } Command;
+
+typedef struct {
+
+  int minimumReplicas;
+  int timeout;
+  int expectedReplicas;
+  char** response;
+} WaitParams;
 
 char *handleCommand(const char *command, char **args, int numArgs, bool isSlave);
 
@@ -24,7 +33,12 @@ char* handleReplConf(char **args, int numArgs, bool isSlave);
 char* handleReplConfCapaPsync2(char **args, int numArgs, bool isSlave);
 char* handlePsync(char **args, int numArgs, bool isSlave);
 char* handleAck(char **args, int numArgs, bool isSlave);
-void updateOffsetForCommand(const char* command);
+
+
+void ackReceived();
+
+
+
 
 extern Command commandTable[];
 extern KeyValueStore store;
