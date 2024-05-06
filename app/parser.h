@@ -4,6 +4,9 @@
 
 #include "./utils/utils.h"
 #include <stdbool.h>
+#include <stdio.h>
+#include "utils/KeyValueStore.h"
+
 
 
 typedef struct {
@@ -17,5 +20,10 @@ bool tryParseCommand(char* buffer);
 bool isWriteCommand(const char* command);
 bool isForbiddenCommand(const char* command);
 void freeRespCommand(RespCommand *respCommand);
+void parseRDBFile(const char* filename, const char* dir, KeyValueStore* store);
+void parseRDBHeader(FILE* file);
+void parseStringDataStructure(FILE* file, KeyValueStore* store);
+void parseRDBVersion(FILE* file);
+void parse_key_value(FILE* file, KeyValueStore* store);
 
 #endif // !PARSER_H

@@ -1,13 +1,14 @@
 #include "command-handler.h"
+#include "utils/KeyValueStore.h"
 #include "utils/utils.h"
 #include <errno.h>
 #include <pthread.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/time.h>
 #include <unistd.h>
-
 
 int replicasProcessed;
 size_t offset = 0;
@@ -119,33 +120,65 @@ char *handleInfo(char **args, int numArgs, bool isSlave) {
 
 
 
-char *handleRDBConfig(char **args, int numArgs, bool isSlave) {
-    if (numArgs < 1) {
-        return strdup("-ERROR Insufficient arguments\r\n");
+char *handleKeys(char **args, int numArgs, bool isSlave) {
+  (void)numArgs;
+  (void)isSlave;
+
+  if (numArgs < 1) {
+    return strdup("-ERROR Insufficient arguments\r\n");
+  }
+
+  int size = lengthOfStore(&store); // Assuming store is a global variable
+  char *response = NULL;
+
+  for (int i = 0; i < size; i++) {
+    const char *key = getKeyAtIdx(&store, i); // Assuming getKeyAtIdx is correctly implemented
+    printf("Key: %s\n", key);
+
+    char *response =
+        malloc(strlen(key) + 20); // Enough space for protocol overhead
+
+    if (response == NULL) {
+      return strdup("-ERROR Memory allocation failed\r\n");
     }
 
-    if (strcmp(args[0], "GET") == 0) {
-        if (numArgs < 2) {
-            return strdup("-ERROR Insufficient arguments\r\n");
-        }
+    sprintf(response, "*%d\r\n$%lu\r\n%s\r\n", size, strlen(key), key);
 
-        if (strcmp(args[1], "dir") == 0) {
-            char response[MAX_DIR_SIZE + 20] = {0};
-            sprintf(response, "*2\r\n$3\r\ndir\r\n$%lu\r\n%s\r\n", strlen(rdbConfig.dir), rdbConfig.dir);
-            return strdup(response);
-        } else if (strcmp(args[1], "dbfilename") == 0) {
-            char response[MAX_FILE_NAME_SIZE + 20] = {0};
-            sprintf(response, "*2\r\n$10\r\ndbfilename\r\n$%lu\r\n%s\r\n", strlen(rdbConfig.dbFileName), rdbConfig.dbFileName);
-            return strdup(response);
-        }
+    return response;
+  }
 
-        return strdup("-ERROR Invalid argument\r\n");
-    }
-
-    return strdup("-ERROR Invalid argument\r\n");
+  // Key not found
+  return strdup("-ERROR Key not found\r\n");
 }
 
 
+char *handleRDBConfig(char **args, int numArgs, bool isSlave) {
+  if (numArgs < 1) {
+    return strdup("-ERROR Insufficient arguments\r\n");
+  }
+
+  if (strcmp(args[0], "GET") == 0) {
+    if (numArgs < 2) {
+      return strdup("-ERROR Insufficient arguments\r\n");
+    }
+
+    if (strcmp(args[1], "dir") == 0) {
+      char response[MAX_DIR_SIZE + 20] = {0};
+      sprintf(response, "*2\r\n$3\r\ndir\r\n$%lu\r\n%s\r\n",
+              strlen(rdbConfig.dir), rdbConfig.dir);
+      return strdup(response);
+    } else if (strcmp(args[1], "dbfilename") == 0) {
+      char response[MAX_FILE_NAME_SIZE + 20] = {0};
+      sprintf(response, "*2\r\n$10\r\ndbfilename\r\n$%lu\r\n%s\r\n",
+              strlen(rdbConfig.dbFileName), rdbConfig.dbFileName);
+      return strdup(response);
+    }
+
+    return strdup("-ERROR Invalid argument\r\n");
+  }
+
+  return strdup("-ERROR Invalid argument\r\n");
+}
 
 char *handleReplConf(char **args, int numArgs, bool isSlave) {
 
@@ -283,15 +316,9 @@ char *handleCommand(const char *command, char **args, int numArg,
 
 // Command table implementation
 Command commandTable[] = {
-    {"PING", handlePing},
-    {"ECHO", handleEcho},
-    {"SET", handleSet},
-    {"GET", handleGet},
-    {"INFO", handleInfo},
-    {"REPLCONF", handleReplConf},
-    {"PSYNC", handlePsync},
-    {"WAIT", handleWait},
-    {"CONFIG", handleRDBConfig},
-    {NULL, NULL} // End of the command table
-                 //
+    {"PING", handlePing},   {"ECHO", handleEcho}, {"SET", handleSet},
+    {"GET", handleGet},     {"INFO", handleInfo}, {"REPLCONF", handleReplConf},
+    {"PSYNC", handlePsync}, {"WAIT", handleWait}, {"CONFIG", handleRDBConfig},
+    {"KEYS", handleKeys},   {NULL, NULL} // End of the command table
+                                         //
 };

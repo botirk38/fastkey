@@ -47,8 +47,6 @@ int main(int argc, char *argv[]) {
   config = configs.serverConfig;
   rdbConfig = configs.rdbConfig;
 
-  
-
   int server_fd = create_server_socket();
   if (server_fd == -1)
     return 1;
@@ -68,6 +66,11 @@ int main(int argc, char *argv[]) {
   init_thread_pool();
   initKeyValueStore(&store);
   initReplicas(&replicas);
+
+  if (rdbConfig.dir[0] != '\0' && rdbConfig.dbFileName[0] != '\0') {
+
+    parseRDBFile(rdbConfig.dbFileName, rdbConfig.dir, &store);
+  }
 
   pthread_t accept_thread;
   if (pthread_create(&accept_thread, NULL, accept_connections, &server_fd) !=

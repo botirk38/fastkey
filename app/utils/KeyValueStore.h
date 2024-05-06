@@ -25,5 +25,7 @@ void deleteKeyValue(KeyValueStore *store, int index);
 long long currentTime();
 void deleteExpiredKeys(KeyValueStore *store);
 void freeKeyValueStore(KeyValueStore *store);
+int lengthOfStore(KeyValueStore *store);
+const char* getKeyAtIdx(KeyValueStore *store, int idx);
 
 #endif // !DEBUG

@@ -43,6 +43,8 @@ void setKeyValue(KeyValueStore *store, const char *key, const char *value,
   store->store[store->size].expiry = expiryTime;
   store->size++;
 
+  printf("Setting key: %s, value: %s\n", key, value);
+
   printf("Key set\n");
 }
 
@@ -60,6 +62,13 @@ const char *getKeyValue(KeyValueStore *store, const char *key) {
     }
   }
   return "Key not found";
+}
+
+const char* getKeyAtIdx(KeyValueStore *store, int index) {
+  if (index < 0 || index >= store->size) {
+    return "Invalid index";
+  }
+  return store->store[index].key;
 }
 
 void deleteKeyValue(KeyValueStore *store, int index) {
@@ -101,3 +110,5 @@ void freeKeyValueStore(KeyValueStore *store) {
   free(store->store);
   store->size = 0;
 }
+
+int lengthOfStore(KeyValueStore *store) { return store->size; }
