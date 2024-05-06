@@ -1,5 +1,4 @@
 #include "parser.h"
-#include <cmath>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>

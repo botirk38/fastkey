@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include "utils/KeyValueStore.h"
+#include <cmath>
 
 
 
