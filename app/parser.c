@@ -117,10 +117,11 @@ char *readString(FILE *file) {
 }
 
 // Function to parse a key-value pair
-void parse_key_value(FILE *rdb_file, KeyValueStore *store, uint64_t expireTime) {
+void parse_key_value(FILE *rdb_file, KeyValueStore *store) {
   // Read value type
   unsigned char value_type;
   fread(&value_type, sizeof(unsigned char), 1, rdb_file);
+  printf("Value Type: %02X\n", value_type);
 
   // Parse the key as a string
   char *key = readString(rdb_file);
@@ -133,32 +134,8 @@ void parse_key_value(FILE *rdb_file, KeyValueStore *store, uint64_t expireTime) 
 
     printf("Key: %s, Value: %s \n", key, value);
 
-    setKeyValue(store, key, value, expireTime);
+    setKeyValue(store, key, value, 0);
 
-    break;
-  }
-
-  case 0x01: { // List encoding
-    uint64_t length = readLengthEncoding(rdb_file);
-    printf("Key: %s, List Length: %lu\n", key, length);
-
-    for (int i = 0; i < length; i++) {
-      char *value = readString(rdb_file);
-      printf("List Value: %s\n", value);
-    }
-
-    break;
-  }
-
-  case EXPIRETIME: {
-    uint64_t expiry = readLengthEncoding(rdb_file);
-    printf("Key: %s, Expiry: %lu\n", key, expiry);
-    break;
-  }
-
-  case EXPIRETIMEMS: {
-    uint64_t expiry = readLengthEncoding(rdb_file);
-    printf("Key: %s, Expiry: %lu\n", key, expiry);
     break;
   }
 
@@ -217,13 +194,7 @@ void parseRDBFile(const char *filename, const char *dir, KeyValueStore *store) {
              hashTableSize, expireHashTableSize);
 
       for (int i = 0; i < hashTableSize; i++) {
-        parse_key_value(file, store, expireTime);
-      }
-
-      // Skip the key hash table
-      
-      for (int i = 0; i < expireHashTableSize; i++) {
-          store->store[i].expiry = readLengthEncoding(file);
+        parse_key_value(file, store);
       }
 
       break;
@@ -237,7 +208,7 @@ void parseRDBFile(const char *filename, const char *dir, KeyValueStore *store) {
       break;
     }
     case EXPIRETIME: {
-      expireTime = readLengthEncoding(file) / 1000;
+      expireTime = readLengthEncoding(file);
       printf("Expire Time: %lu seconds\n", expireTime);
       break;
     }

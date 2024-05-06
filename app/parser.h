@@ -6,7 +6,6 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include "utils/KeyValueStore.h"
-#include <stdint.h>
 
 
 
@@ -25,6 +24,6 @@ void parseRDBFile(const char* filename, const char* dir, KeyValueStore* store);
 void parseRDBHeader(FILE* file);
 void parseStringDataStructure(FILE* file, KeyValueStore* store);
 void parseRDBVersion(FILE* file);
-void parse_key_value(FILE* file, KeyValueStore* store, uint64_t expiry);
+void parse_key_value(FILE* file, KeyValueStore* store);
 
 #endif // !PARSER_H
