@@ -196,7 +196,7 @@ void parseRDBFile(const char *filename, const char *dir, KeyValueStore *store) {
       }
 
       // Skip the key hash table
-      
+      fseek(file, hashTableSize, SEEK_CUR); 
       for (int i = 0; i < expireHashTableSize; i++) {
           printf("Parsing expire hash table\n");
           store->store[i].expiry = readLengthEncoding(file);
