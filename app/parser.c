@@ -123,9 +123,7 @@ void parse_key_value(FILE *rdb_file, KeyValueStore *store) {
   fread(&value_type, sizeof(unsigned char), 1, rdb_file);
   printf("Value Type: %02X\n", value_type);
 
-
-  char* ttl = readString(rdb_file);
-  printf("TTL: %s\n", ttl);
+  int expiry = readLengthEncoding(rdb_file);
   // Parse the key as a string
   char *key = readString(rdb_file);
 
