@@ -52,7 +52,7 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  if (start_listening(server_fd, 10) == -1) {
+  if (start_listening(server_fd, 128) == -1) {
     cleanup(server_fd);
     cleanup_thread_pool();
     return 1;
@@ -82,16 +82,19 @@ int main(int argc, char *argv[]) {
 
     if (startReplication(config.masterHost, config.masterPort, config.port) ==
         false) {
+      printf("Failed to start replication\n");
       cleanup(server_fd);
       cleanup_thread_pool();
       return 1;
     }
-    enqueue_client(sockfd);
+    enqueue_client(master_fd);
   }
 
   // Wait for the accept thread to finish (e.g., on server shutdown)
   pthread_join(accept_thread, NULL);
   pthread_join(keyExpiryThread, NULL);
+
+  printf("Cleaning up...\n");
 
   freeKeyValueStore(&store);
   freeReplicas(&replicas);
@@ -160,6 +163,18 @@ void *accept_connections(void *arg) {
     int client_fd =
         accept(server_fd, (struct sockaddr *)&client_addr, &client_addr_len);
 
+    if(setsockopt(client_fd, SOL_SOCKET, SO_REUSEADDR, &client_fd, sizeof(client_fd)) < 0) {
+      perror("SO_REUSEADDR failed");
+      close(client_fd);
+      continue;
+    }
+
+    if(setsockopt(client_fd, SOL_SOCKET, SO_REUSEPORT, &client_fd, sizeof(client_fd)) < 0) {
+      perror("SO_REUSEPORT failed");
+      close(client_fd);
+      continue;
+    }
+
     if (client_fd == -1) {
       if (errno == EINTR) {
         continue; // Interrupted by signal
@@ -180,6 +195,9 @@ void cleanup(int server_fd) { close(server_fd); }
 void handle_client(int client_fd) {
 
   while (1) {
+
+    printf("Client fd: %d\n", client_fd);
+
     char buffer[BUFFER_SIZE] = {0};
 
     printf("Waiting to receive data...\n");
@@ -188,9 +206,9 @@ void handle_client(int client_fd) {
                                   0); // -1 to leave space for null terminator
 
     if (bytes_received <= 0) {
-      if (bytes_received == 0)
+      if (bytes_received == 0) {
         printf("Client closed connection\n");
-      else
+      } else
         perror("Receive failed");
       close(client_fd);
       return;
@@ -202,7 +220,7 @@ void handle_client(int client_fd) {
 
     RespCommand *command = parseCommand(buffer);
 
-    printf("Command: %s\n", command->command);
+    printf("Command in Master: %s\n", command->command);
 
     for (int i = 0; i < command->numArgs; i++) {
       printf("Arg %d: %s\n", i, command->args[i]);
@@ -230,107 +248,126 @@ void handle_client(int client_fd) {
 
     send(client_fd, response, strlen(response), 0);
   }
-
+  printf("Closing client connection\n");
   close(client_fd);
 }
 
 void handle_master(int master_fd) {
-  char buffer[BUFFER_SIZE];
-  char *bufferStr = NULL;
-  size_t bufferStrLength = 0;
-  ssize_t n = 0;
 
-  if (master_fd == -1) {
-    fprintf(stderr, "Master connection is closed\n");
-    return;
-  }
+  while (1) {
+    char buffer[BUFFER_SIZE];
+    char *bufferStr = NULL;
+    size_t bufferStrLength = 0;
+    ssize_t n = 0;
 
-  bufferStr = malloc(1); // Initially allocate buffer string
-  if (!bufferStr) {
-    perror("Failed to allocate memory");
-    return;
-  }
-  bufferStr[0] = '\0'; // Initialize empty C-string
-
-  while ((n = recv(master_fd, buffer, sizeof(buffer) - 1, 0)) > 0) {
-    buffer[n] = '\0'; // Null-terminate the string
-
-    // Append new data to buffer string
-    char *newBufferStr = realloc(bufferStr, bufferStrLength + n + 1);
-    if (!newBufferStr) {
-      perror("Failed to allocate memory");
-      free(bufferStr);
+    if (master_fd == -1) {
+      fprintf(stderr, "Master connection is closed\n");
       return;
     }
-    bufferStr = newBufferStr;
-    memcpy(bufferStr + bufferStrLength, buffer, n);
-    bufferStrLength += n;
-    bufferStr[bufferStrLength] = '\0';
 
-    size_t pos = 0;
-    bool foundCommand = false;
-    while (true) {
-      size_t commandStart = pos;
-      while (commandStart < bufferStrLength && bufferStr[commandStart] != '*') {
-        commandStart++;
-      }
-
-      if (commandStart >= bufferStrLength)
-        break;
-
-      size_t commandEnd = commandStart;
-      while (commandEnd < bufferStrLength &&
-             !(bufferStr[commandEnd] == '\r' &&
-               bufferStr[commandEnd + 1] == '\n')) {
-        commandEnd++;
-      }
-
-      if (commandEnd >= bufferStrLength || bufferStr[commandEnd] != '\r')
-        break;
-
-      foundCommand = true;
-
-      // Process the command excluding "\r\n"
-
-      RespCommand *command = parseCommand(bufferStr + commandStart);
-
-      printf("Command: %s\n", command->command);
-
-      for (int i = 0; i < command->numArgs; i++) {
-        printf("Arg %d: %s\n", i, command->args[i]);
-      }
-
-      char *response = handleCommand(command->command, command->args,
-                                     command->numArgs, config.isSlave);
-
-      if (!isWriteCommand(command->command)) {
-        send(master_fd, response, strlen(response), 0);
-      }
-
-      // Prepare for the next iteration
-      pos = commandEnd + 2; // Move past the "\r\n" of the current command
+    bufferStr = malloc(1); // Initially allocate buffer string
+    if (!bufferStr) {
+      perror("Failed to allocate memory");
+      return;
     }
+    bufferStr[0] = '\0'; // Initialize empty C-string
 
-    if (foundCommand && pos > 0) {
-      memmove(bufferStr, bufferStr + pos, bufferStrLength - pos);
-      bufferStrLength -= pos;
-      bufferStr = realloc(bufferStr, bufferStrLength + 1);
-      if (!bufferStr) {
+    while ((n = recv(master_fd, buffer, sizeof(buffer) - 1, 0)) > 0) {
+      buffer[n] = '\0'; // Null-terminate the string
+
+      // Append new data to buffer string
+      char *newBufferStr = realloc(bufferStr, bufferStrLength + n + 1);
+      if (!newBufferStr) {
         perror("Failed to allocate memory");
+        free(bufferStr);
         return;
       }
+      bufferStr = newBufferStr;
+      memcpy(bufferStr + bufferStrLength, buffer, n);
+      bufferStrLength += n;
       bufferStr[bufferStrLength] = '\0';
-    }
-  }
 
-  free(bufferStr);
+      size_t pos = 0;
+      bool foundCommand = false;
+      while (true) {
+        size_t commandStart = pos;
+        while (commandStart < bufferStrLength &&
+               bufferStr[commandStart] != '*') {
+          commandStart++;
+        }
+
+        if (commandStart >= bufferStrLength)
+          break;
+
+        size_t commandEnd = commandStart;
+        while (commandEnd < bufferStrLength &&
+               !(bufferStr[commandEnd] == '\r' &&
+                 bufferStr[commandEnd + 1] == '\n')) {
+          commandEnd++;
+        }
+
+        if (commandEnd >= bufferStrLength || bufferStr[commandEnd] != '\r')
+          break;
+
+        foundCommand = true;
+
+        // Process the command excluding "\r\n"
+        
+        printf("Buffer: %s\n", bufferStr + commandStart);
+
+        RespCommand *command = parseCommand(bufferStr + commandStart);
+
+        printf("Command: %s\n", command->command);
+
+        for (int i = 0; i < command->numArgs; i++) {
+          printf("Arg %d: %s\n", i, command->args[i]);
+        }
+
+        char* response;
+
+        if(command->command != NULL) {
+
+        response = handleCommand(command->command, command->args,
+                                       command->numArgs, true);
+
+        } else {
+          response = NULL;
+        } 
+
+        printf("Response: %s\n", response);
+
+        if (strcmp(command->command, "REPLCONF") == 0 &&
+            strcmp(command->args[0], "GETACK") == 0 && response != NULL) {
+          printf("Received ACK\n");
+          send(master_fd, response, strlen(response), 0);
+        }
+
+        // Prepare for the next iteration
+        pos = commandEnd + 2; // Move past the "\r\n" of the current command
+      }
+
+      if (foundCommand && pos > 0) {
+        memmove(bufferStr, bufferStr + pos, bufferStrLength - pos);
+        bufferStrLength -= pos;
+        bufferStr = realloc(bufferStr, bufferStrLength + 1);
+        if (!bufferStr) {
+          perror("Failed to allocate memory");
+          return;
+        }
+        bufferStr[bufferStrLength] = '\0';
+      }
+    }
+
+    free(bufferStr);
+    close(master_fd);
+  }
 }
 
 void *worker_func(void *arg) {
 
   while (1) {
     int client_fd = dequeue_client();
-    if (client_fd == sockfd && config.isSlave) {
+    if (client_fd == master_fd && config.isSlave) {
       handle_master(client_fd);
     } else {
       handle_client(client_fd);

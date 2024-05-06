@@ -15,6 +15,7 @@ typedef struct {
 RespCommand *parseCommand(char *buffer);
 bool tryParseCommand(char* buffer);
 bool isWriteCommand(const char* command);
+bool isForbiddenCommand(const char* command);
 void freeRespCommand(RespCommand *respCommand);
 
 #endif // !PARSER_H

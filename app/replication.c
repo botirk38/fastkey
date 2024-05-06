@@ -7,13 +7,27 @@
 #include <sys/socket.h>
 #include <unistd.h> // for close()
 
-int sockfd;
-
+int master_fd = -1;
 
 int establishConnection(const char *host, int port) {
   struct sockaddr_in serv_addr;
+  int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+  int reuse = 1;
 
-  sockfd = socket(AF_INET, SOCK_STREAM, 0);
+  if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0) {
+    perror("SO_REUSEADDR failed");
+    close(sockfd);
+    return -1;
+  }
+
+  // Reuse the port if the connection is lost
+
+  if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(reuse)) < 0) {
+    perror("SO_REUSEPORT failed");
+    close(sockfd);
+    return -1;
+  }
+
   if (sockfd < 0) {
     perror("Socket creation error");
     return -1;
@@ -100,6 +114,11 @@ bool waitForOk(int sockfd) {
   }
 
   buffer[n] = '\0';
+
+  if (strcmp(buffer, "+OK\r\n") != 0) {
+    return false;
+  }
+
   return true;
 }
 
@@ -113,17 +132,23 @@ bool waitForPong(int sockfd) {
   }
 
   buffer[n] = '\0';
+
+  if (strcmp(buffer, "+PONG\r\n") != 0) {
+    return false;
+  }
+
+
   return true;
 }
 
 bool startReplication(const char *masterHost, int masterPort, int port) {
-  int sockfd = establishConnection(masterHost, masterPort);
-  if (sockfd < 0) {
+  master_fd = establishConnection(masterHost, masterPort);
+  if (master_fd < 0) {
     return false;
   }
 
-  if (!handShakeSuccess(sockfd, port)) {
-    closeConnection(sockfd);
+  if (!handShakeSuccess(master_fd, port)) {
+    closeConnection(master_fd);
     return false;
   }
 

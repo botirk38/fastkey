@@ -67,3 +67,13 @@ char *createRDBFile() {
   free(decodedData); // Free the decoded data after using it
   return rdb;
 }
+
+size_t digitsInNumber(size_t num) {
+    size_t digits = 0;
+    do {
+        digits++;
+        num /= 10;
+    } while (num != 0);
+    return digits;
+}
+

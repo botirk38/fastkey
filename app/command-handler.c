@@ -4,9 +4,15 @@
 #include <stdlib.h>
 #include <string.h>
 
+static size_t offset = 0;
+
 char *handlePing(char **args, int numArgs, bool isSlave) {
   (void)args;    // Unused parameter
   (void)numArgs; // Unused parameter
+
+  if (isSlave) {
+    offset += 14;
+  }
   return strdup("+PONG\r\n");
 }
 
@@ -32,8 +38,13 @@ char *handleSet(char **args, int numArgs, bool isSlave) {
   const char *value = args[1];
   int expiry = 0;
 
+  if (isSlave) {
+    offset += 25 + strlen(key) + strlen(value);
+  }
+
   if (numArgs > 3) {
     expiry = atoi(args[3]);
+    offset += 14 + strlen(args[3]);
   }
 
   // Check for expiry argument which is optional
@@ -88,21 +99,27 @@ char *handleInfo(char **args, int numArgs, bool isSlave) {
 
 char *handleReplConf(char **args, int numArgs, bool isSlave) {
 
-  (void)isSlave;
-
   char *response;
 
-  if (numArgs == 2 && strcmp(args[0], "GETACK") == 0) {
+  if (numArgs == 2 && strcmp(args[0], "GETACK") == 0 && isSlave) {
+    printf("Received ACK in Command Handler\n");
 
+    char responseBuffer[1024]; // Buffer to hold the response string
+    sprintf(responseBuffer,
+            "*3\r\n$8\r\nREPLCONF\r\n$3\r\nACK\r\n$%zu\r\n%zu\r\n",
+            digitsInNumber(offset), offset);
 
-
-    response = "*3\r\n$8\r\nREPLCONF\r\n$3\r\nACK\r\n$1\r\n0\r\n";
-    printf("Received ACK\n");
+    response = strdup(responseBuffer);
 
   } else {
+
+    if (isSlave) {
+      offset += 37;
+    }
+
     response = "+OK\r\n";
   }
-
+  printf("Response for REPLCONF: %s\n", response);
   return response;
 }
 
@@ -128,6 +145,14 @@ char *handlePsync(char **args, int numArgs, bool isSlave) {
   return fullResponse;
 }
 
+char *handleAck(char **args, int numArgs, bool isSlave) {
+  (void)args;
+  (void)numArgs;
+  (void)isSlave;
+
+  return "+OK\r\n";
+}
+
 char *handleCommand(const char *command, char **args, int numArg,
                     bool isSlave) {
   for (int i = 0; commandTable[i].command != NULL; i++) {
@@ -141,8 +166,14 @@ char *handleCommand(const char *command, char **args, int numArg,
 
 // Command table implementation
 Command commandTable[] = {
-    {"PING", handlePing},   {"ECHO", handleEcho}, {"SET", handleSet},
-    {"GET", handleGet},     {"INFO", handleInfo}, {"REPLCONF", handleReplConf},
-    {"PSYNC", handlePsync}, {NULL, NULL} // End of the command table
-                                         //
+    {"PING", handlePing},
+    {"ECHO", handleEcho},
+    {"SET", handleSet},
+    {"GET", handleGet},
+    {"INFO", handleInfo},
+    {"REPLCONF", handleReplConf},
+    {"PSYNC", handlePsync},
+    {"ACK", handleAck},
+    {NULL, NULL} // End of the command table
+                 //
 };
