@@ -2,6 +2,7 @@
 #define COMMAND_HANDLER_H
 
 #include "utils/KeyValueStore.h"
+#include "config.h"
 #include <stdbool.h>
 #include <stddef.h>
 
@@ -33,6 +34,8 @@ char* handleReplConf(char **args, int numArgs, bool isSlave);
 char* handleReplConfCapaPsync2(char **args, int numArgs, bool isSlave);
 char* handlePsync(char **args, int numArgs, bool isSlave);
 char* handleAck(char **args, int numArgs, bool isSlave);
+char* handleWait(char **args, int numArgs, bool isSlave);
+char* handleRDBConfig(char **args, int numArgs, bool isSlave);
 
 
 void ackReceived();
@@ -42,6 +45,7 @@ void ackReceived();
 
 extern Command commandTable[];
 extern KeyValueStore store;
+extern RDBConfig rdbConfig;
 
 #endif // COMMAND_HANDLER_H
 

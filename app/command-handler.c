@@ -8,6 +8,7 @@
 #include <sys/time.h>
 #include <unistd.h>
 
+
 int replicasProcessed;
 size_t offset = 0;
 size_t masterOffset = 0;
@@ -116,6 +117,36 @@ char *handleInfo(char **args, int numArgs, bool isSlave) {
   return response;
 }
 
+
+
+char *handleRDBConfig(char **args, int numArgs, bool isSlave) {
+    if (numArgs < 1) {
+        return strdup("-ERROR Insufficient arguments\r\n");
+    }
+
+    if (strcmp(args[0], "GET") == 0) {
+        if (numArgs < 2) {
+            return strdup("-ERROR Insufficient arguments\r\n");
+        }
+
+        if (strcmp(args[1], "dir") == 0) {
+            char response[MAX_DIR_SIZE + 20] = {0};
+            sprintf(response, "*2\r\n$3\r\ndir\r\n$%lu\r\n%s\r\n", strlen(rdbConfig.dir), rdbConfig.dir);
+            return strdup(response);
+        } else if (strcmp(args[1], "dbfilename") == 0) {
+            char response[MAX_FILE_NAME_SIZE + 20] = {0};
+            sprintf(response, "*2\r\n$10\r\ndbfilename\r\n$%lu\r\n%s\r\n", strlen(rdbConfig.dbFileName), rdbConfig.dbFileName);
+            return strdup(response);
+        }
+
+        return strdup("-ERROR Invalid argument\r\n");
+    }
+
+    return strdup("-ERROR Invalid argument\r\n");
+}
+
+
+
 char *handleReplConf(char **args, int numArgs, bool isSlave) {
 
   char *response;
@@ -192,8 +223,8 @@ char *handleWait(char **args, int numArgs, bool isSlave) {
   ts.tv_sec += timeout / 1000;
   ts.tv_nsec += (timeout % 1000) * 1000000;
 
-  // Wait until the number of replicasProcessed reaches the minimum required or
-  // timeout occurs
+  // Wait until the number of replicasProcessed reaches the minimum required
+  // or timeout occurs
   while (replicasProcessed < expectedReplicas) {
     int res = pthread_cond_timedwait(&cond, &mutex, &ts);
     if (res == ETIMEDOUT) {
@@ -260,6 +291,7 @@ Command commandTable[] = {
     {"REPLCONF", handleReplConf},
     {"PSYNC", handlePsync},
     {"WAIT", handleWait},
+    {"CONFIG", handleRDBConfig},
     {NULL, NULL} // End of the command table
                  //
 };

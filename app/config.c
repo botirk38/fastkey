@@ -3,13 +3,16 @@
 #include <stdlib.h>
 #include <string.h>
 
-Config parse_cli_args(int argc, char **argv) {
+RDBConfig rdbConfig;
+
+Configs parse_cli_args(int argc, char **argv) {
 
   for (int i = 1; i < argc; i++) {
     printf("argv[%d] = %s\n", i, argv[i]);
   }
 
-  Config config = {config.port = 6379, config.masterHost = NULL, config.masterPort = 0, config.isSlave = false};
+  Config config = {config.port = 6379, config.masterHost = NULL,
+                   config.masterPort = 0, config.isSlave = false};
 
   for (int i = 1; i < argc; i++) {
 
@@ -22,7 +25,7 @@ Config parse_cli_args(int argc, char **argv) {
       config.port = atoi(argv[i + 1]);
     }
 
-    if (strcmp(argv[i], "--replicaof") == 0) {
+    else if (strcmp(argv[i], "--replicaof") == 0) {
       if (argv[i + 1] == NULL || argv[i + 2] == NULL) {
         printf("Invalid arguments for --replicaof\n");
         exit(1);
@@ -34,8 +37,32 @@ Config parse_cli_args(int argc, char **argv) {
 
       config.masterPort = atoi(argv[i + 2]);
       config.isSlave = true;
+    } else if (strcmp(argv[i], "--dir") == 0) {
+
+      printf("argv[i + 1] = %s\n", argv[i + 1]);
+
+      if (argv[i + 1] == NULL) {
+        printf("Invalid arguments for --dir\n");
+        exit(1);
+      }
+
+      snprintf(rdbConfig.dir, sizeof(rdbConfig.dir), "%s", argv[i + 1]);
+      printf("RDB dir: %s\n", rdbConfig.dir);
+    } else if (strcmp(argv[i], "--dbfilename") == 0) {
+
+      if (argv[i + 1] == NULL) {
+        printf("Invalid arguments for --dbfilename\n");
+        exit(1);
+      }
+
+      snprintf(rdbConfig.dbFileName, sizeof(rdbConfig.dbFileName), "%s",
+               argv[i + 1]);
+
+      printf("RDB filename: %s\n", rdbConfig.dbFileName);
     }
   }
 
-  return config;
+  Configs configs = {config, rdbConfig};
+
+  return configs;
 }

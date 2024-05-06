@@ -35,13 +35,19 @@ volatile sig_atomic_t server_running = 1;
 KeyValueStore store;
 Config config;
 Replicas replicas;
+extern RDBConfig rdbConfig;
 
 int main(int argc, char *argv[]) {
 
   setbuf(stdout, NULL);
   printf("Logs from your program will appear here!\n");
 
-  config = parse_cli_args(argc, argv);
+  Configs configs = parse_cli_args(argc, argv);
+
+  config = configs.serverConfig;
+  rdbConfig = configs.rdbConfig;
+
+  
 
   int server_fd = create_server_socket();
   if (server_fd == -1)
@@ -217,6 +223,8 @@ void handle_client(int client_fd) {
 
     if (strcmp(command->command, "WAIT") == 0) {
 
+      printf("Propagating command to replicas WAIT\n");
+
       propagateCommandToReplicas(
           &replicas, "*3\r\n$8\r\nREPLCONF\r\n$6\r\nGETACK\r\n$1\r\n*\r\n");
 
@@ -247,7 +255,7 @@ void handle_client(int client_fd) {
 
       printf("Replicas: %d\n", replicas.numReplicas);
 
-      if ((isWriteCommand(command->command)) && replicas.numReplicas > 0) {
+      if (isWriteCommand(command->command) && replicas.numReplicas > 0) {
         printf("Propagating command to replicas\n");
         propagateCommandToReplicas(&replicas, buffer);
       }
@@ -317,16 +325,18 @@ void handle_master(int master_fd) {
 
         if (command) {
 
+          printf("Command in Slave: %s\n", command->command);
+
           char *result = handleCommand(command->command, command->args,
                                        command->numArgs, 1);
 
           if (result) {
-            printf("Result: %s\n", result);
+            printf("Result in Slave: %s\n", result);
 
             if (strcmp(command->command, "REPLCONF") == 0 &&
                 strcmp(command->args[0], "GETACK") == 0) {
 
-              if (send(master_fd, result, strlen(result), 0) == -1) {
+              if (send(master_fd, result, strlen(result), 0) != 0) {
                 fprintf(stderr, "Send failed to master");
               }
 
@@ -334,7 +344,7 @@ void handle_master(int master_fd) {
 
               break;
             }
-            free(result); // Assume handleCommand allocates result
+            free(result);
           }
         }
 
