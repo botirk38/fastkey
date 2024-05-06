@@ -123,6 +123,9 @@ void parse_key_value(FILE *rdb_file, KeyValueStore *store) {
   fread(&value_type, sizeof(unsigned char), 1, rdb_file);
   printf("Value Type: %02X\n", value_type);
 
+
+  char* ttl = readString(rdb_file);
+  printf("TTL: %s\n", ttl);
   // Parse the key as a string
   char *key = readString(rdb_file);
 
@@ -205,16 +208,6 @@ void parseRDBFile(const char *filename, const char *dir, KeyValueStore *store) {
       printf("Auxiliary Field: Key: %s, Value: %s\n", key, value);
       free(key);
       free(value);
-      break;
-    }
-    case EXPIRETIME: {
-      expireTime = readLengthEncoding(file);
-      printf("Expire Time: %lu seconds\n", expireTime);
-      break;
-    }
-    case EXPIRETIMEMS: {
-      expireTime =  readLengthEncoding(file);
-      printf("Expire Time: %lu milliseconds\n", expireTime);
       break;
     }
 
