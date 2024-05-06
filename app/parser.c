@@ -141,6 +141,7 @@ void parse_key_value(FILE *rdb_file, KeyValueStore *store) {
     break;
   }
   case EXPIRETIME: {
+    fseek(rdb_file, -1, SEEK_CUR);
     expireTime = fread(&expireTime, sizeof(uint32_t), 1, rdb_file); 
     printf("Key: %s, Expire Time: %lu\n", key, expireTime);
     break;
