@@ -146,7 +146,7 @@ char *handleKeys(char **args, int numArgs, bool isSlave) {
 
   // Collect all keys and calculate the needed buffer size
   for (int i = 0; i < size; i++) {
-    keys[i] = getKeyAtIdx(&store, i);
+    keys[i] = strcpy(malloc(MAX_KEY_LENGTH), getKeyAtIdx(&store, i)); 
     if (!keys[i]) {
       while (i-- > 0)
         free(keys[i]); // Cleanup on failure
