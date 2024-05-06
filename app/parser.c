@@ -138,6 +138,18 @@ void parse_key_value(FILE *rdb_file, KeyValueStore *store, uint64_t expireTime) 
     break;
   }
 
+  case 0x01: { // List encoding
+    uint64_t length = readLengthEncoding(rdb_file);
+    printf("Key: %s, List Length: %lu\n", key, length);
+
+    for (int i = 0; i < length; i++) {
+      char *value = readString(rdb_file);
+      printf("List Value: %s\n", value);
+    }
+
+    break;
+  }
+
   default:
     printf("Unsupported value type\n");
     break;
