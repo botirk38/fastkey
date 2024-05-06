@@ -124,7 +124,6 @@ void parse_key_value(FILE *rdb_file, KeyValueStore *store) {
 
   // Parse the key as a string
   char *key = readString(rdb_file);
-  uint64_t expiry = 0;
 
   // Parse the value based on the value type
   switch (value_type) {
@@ -134,19 +133,14 @@ void parse_key_value(FILE *rdb_file, KeyValueStore *store) {
 
     printf("Key: %s, Value: %s \n", key, value);
 
-    setKeyValue(store, key, value, expiry);
+    setKeyValue(store, key, value, 0);
 
-    break;
-  }
-
-  case EXPIRETIMEMS: {
-    expiry = readLengthEncoding(rdb_file);
     break;
   }
 
   default:
     printf("Unsupported value type\n");
-    break;
+    exit(EXIT_FAILURE);
   }
 }
 
@@ -180,6 +174,7 @@ void parseRDBFile(const char *filename, const char *dir, KeyValueStore *store) {
 
   // Loop until end of file
   unsigned char opcode;
+  uint64_t expireTime = 0;
   while (fread(&opcode, sizeof(opcode), 1, file)) {
 
     printf("Opcode: %02X\n", opcode);
@@ -212,13 +207,13 @@ void parseRDBFile(const char *filename, const char *dir, KeyValueStore *store) {
       break;
     }
     case EXPIRETIME: {
-      uint64_t expiryTime = readLengthEncoding(file);
-      printf("Expire Time: %lu seconds\n", expiryTime);
+      expireTime = readLengthEncoding(file);
+      printf("Expire Time: %lu seconds\n", expireTime);
       break;
     }
     case EXPIRETIMEMS: {
-      uint64_t expiryTime = readLengthEncoding(file);
-      printf("Expire Time: %lu milliseconds\n", expiryTime);
+      expireTime =  readLengthEncoding(file);
+      printf("Expire Time: %lu milliseconds\n", expireTime);
       break;
     }
 
