@@ -118,34 +118,71 @@ char *handleInfo(char **args, int numArgs, bool isSlave) {
   return response;
 }
 
-char *handleKeys(char **args, int numArgs, bool isSlave) {
-  (void)numArgs;
-  (void)isSlave;
-
-  if (numArgs < 1) {
-    return strdup("-ERROR Insufficient arguments\r\n");
+int digitCount(size_t num) {
+  int count = 1;
+  while (num >= 10) {
+    num /= 10;
+    count++;
   }
+  return count;
+}
+char *handleKeys(char **args, int numArgs, bool isSlave) {
+  (void)args;    // Not used
+  (void)numArgs; // Not used
+  (void)isSlave; // Not used
 
   int size = lengthOfStore(&store); // Assuming store is a global variable
-  char *response = NULL;
 
-  for (int i = 0; i < size; i++) {
-    const char *key =
-        getKeyAtIdx(&store, i); // Assuming getKeyAtIdx is correctly implemented
-    printf("Key: %s\n", key);
-
-    char *response =
-        malloc(strlen(key) + 20); // Enough space for protocol overhead
-
-    if (response == NULL) {
-      return strdup("-ERROR Memory allocation failed\r\n");
-    }
-
-    sprintf(response, "*%d\r\n$%lu\r\n%s\r\n", size, strlen(key), key);
+  if (size == 0) {
+    return strdup("*0\r\n"); // No keys to return
   }
 
+  // Calculate the total length of the response
+  int totalLength = 0;
+  char **keys = malloc(sizeof(char *) * size);
+  if (!keys) {
+    return strdup("-ERROR Memory allocation failed\r\n");
+  }
+
+  // Collect all keys and calculate the needed buffer size
+  for (int i = 0; i < size; i++) {
+    keys[i] = getKeyAtIdx(&store, i);
+    if (!keys[i]) {
+      while (i-- > 0)
+        free(keys[i]); // Cleanup on failure
+      free(keys);
+      return strdup("-ERROR Retrieving key failed\r\n");
+    }
+    // +3 for $, \r, \n; + int length of the key size; + strlen of key; +2 for
+    // \r\n after key
+    totalLength += strlen(keys[i]) + digitCount(strlen(keys[i])) + 6;
+  }
+
+  // Allocate response buffer
+  int responseLength =
+      digitCount(size) + 5 + totalLength; // +5 for "*<size>\r\n"
+  char *response = malloc(responseLength);
+  if (!response) {
+    for (int i = 0; i < size; i++)
+      free(keys[i]);
+    free(keys);
+    return strdup("-ERROR Memory allocation failed\r\n");
+  }
+
+  // Write the initial part of the response
+  char *ptr = response;
+  ptr += sprintf(ptr, "*%d\r\n", size);
+
+  // Append all keys to the response
+  for (int i = 0; i < size; i++) {
+    ptr += sprintf(ptr, "$%lu\r\n%s\r\n", strlen(keys[i]), keys[i]);
+  }
+
+  free(keys); // Cleanup key array
   return response;
 }
+
+// Helper function to count digits in an integer
 
 char *handleRDBConfig(char **args, int numArgs, bool isSlave) {
   if (numArgs < 1) {
