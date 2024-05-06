@@ -140,7 +140,7 @@ void parse_key_value(FILE *rdb_file, KeyValueStore *store) {
 
   default:
     printf("Unsupported value type\n");
-    exit(EXIT_FAILURE);
+    break;
   }
 
 }
@@ -214,6 +214,7 @@ void parseRDBFile(const char *filename, const char *dir, KeyValueStore *store) {
     case EXPIRETIMEMS: {
       uint64_t expiryTime = readLengthEncoding(file);
       printf("Expire Time: %lu milliseconds\n", expiryTime);
+
       break;
     }
 
