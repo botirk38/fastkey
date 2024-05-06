@@ -118,8 +118,6 @@ char *handleInfo(char **args, int numArgs, bool isSlave) {
   return response;
 }
 
-
-
 char *handleKeys(char **args, int numArgs, bool isSlave) {
   (void)numArgs;
   (void)isSlave;
@@ -132,7 +130,8 @@ char *handleKeys(char **args, int numArgs, bool isSlave) {
   char *response = NULL;
 
   for (int i = 0; i < size; i++) {
-    const char *key = getKeyAtIdx(&store, i); // Assuming getKeyAtIdx is correctly implemented
+    const char *key =
+        getKeyAtIdx(&store, i); // Assuming getKeyAtIdx is correctly implemented
     printf("Key: %s\n", key);
 
     char *response =
@@ -143,14 +142,10 @@ char *handleKeys(char **args, int numArgs, bool isSlave) {
     }
 
     sprintf(response, "*%d\r\n$%lu\r\n%s\r\n", size, strlen(key), key);
-
-    return response;
   }
 
-  // Key not found
-  return strdup("-ERROR Key not found\r\n");
+  return response;
 }
-
 
 char *handleRDBConfig(char **args, int numArgs, bool isSlave) {
   if (numArgs < 1) {
