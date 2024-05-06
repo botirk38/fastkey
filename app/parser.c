@@ -146,7 +146,7 @@ void parse_key_value(FILE *rdb_file, KeyValueStore *store) {
 
   default:
     printf("Unsupported value type %02X\n", value_type);
-    exit(EXIT_FAILURE);
+    break;
   }
 }
 
