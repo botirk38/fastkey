@@ -24,6 +24,6 @@ void parseRDBFile(const char* filename, const char* dir, KeyValueStore* store);
 void parseRDBHeader(FILE* file);
 void parseStringDataStructure(FILE* file, KeyValueStore* store);
 void parseRDBVersion(FILE* file);
-void parse_key_value(FILE* file, KeyValueStore* store);
+void parse_key_value(FILE* file, KeyValueStore* store, uint64_t expiry);
 
 #endif // !PARSER_H

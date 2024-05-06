@@ -1,4 +1,5 @@
 #include "parser.h"
+#include <cmath>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -117,7 +118,7 @@ char *readString(FILE *file) {
 }
 
 // Function to parse a key-value pair
-void parse_key_value(FILE *rdb_file, KeyValueStore *store) {
+void parse_key_value(FILE *rdb_file, KeyValueStore *store, uint64_t expireTime) {
   // Read value type
   unsigned char value_type;
   fread(&value_type, sizeof(unsigned char), 1, rdb_file);
@@ -133,7 +134,7 @@ void parse_key_value(FILE *rdb_file, KeyValueStore *store) {
 
     printf("Key: %s, Value: %s \n", key, value);
 
-    setKeyValue(store, key, value, 0);
+    setKeyValue(store, key, value, expireTime);
 
     break;
   }
@@ -174,6 +175,7 @@ void parseRDBFile(const char *filename, const char *dir, KeyValueStore *store) {
 
   // Loop until end of file
   unsigned char opcode;
+  uint64_t expireTime = 0;
   while (fread(&opcode, sizeof(opcode), 1, file)) {
 
     printf("Opcode: %02X\n", opcode);
@@ -192,13 +194,12 @@ void parseRDBFile(const char *filename, const char *dir, KeyValueStore *store) {
              hashTableSize, expireHashTableSize);
 
       for (int i = 0; i < hashTableSize; i++) {
-        parse_key_value(file, store);
+        parse_key_value(file, store, expireTime);
       }
 
       // Skip the key hash table
-      fseek(file, hashTableSize, SEEK_CUR); 
+      
       for (int i = 0; i < expireHashTableSize; i++) {
-          printf("Parsing expire hash table\n");
           store->store[i].expiry = readLengthEncoding(file);
       }
 
@@ -210,6 +211,16 @@ void parseRDBFile(const char *filename, const char *dir, KeyValueStore *store) {
       printf("Auxiliary Field: Key: %s, Value: %s\n", key, value);
       free(key);
       free(value);
+      break;
+    }
+    case EXPIRETIME: {
+      expireTime = readLengthEncoding(file) / 1000;
+      printf("Expire Time: %lu seconds\n", expireTime);
+      break;
+    }
+    case EXPIRETIMEMS: {
+      expireTime =  readLengthEncoding(file);
+      printf("Expire Time: %lu milliseconds\n", expireTime);
       break;
     }
 
