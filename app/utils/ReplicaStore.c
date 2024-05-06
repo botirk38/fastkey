@@ -59,3 +59,13 @@ void propagateCommandToReplicas(Replicas *replicas, char* buffer) {
   }
 
 }
+
+bool isReplica(Replicas *replicas, int fd) {
+  for (int i = 0; i < replicas->numReplicas; i++) {
+    if (replicas->replicas[i].fd == fd) {
+      return true;
+    }
+  }
+
+  return false;
+}

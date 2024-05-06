@@ -22,7 +22,6 @@ typedef struct {
 
 } Replicas;
 
-static Replicas replicas;
 
 
 
@@ -32,6 +31,8 @@ void removeReplica(Replicas *replicas, int fd);
 void freeReplicas(Replicas *replicas);
 void propagateCommandToReplicas(Replicas *replicas, char*buffer);
 bool isReplicasEmpty(Replicas *replicas);
+bool isReplica(Replicas* replicas, int sockfd);
+
 
 
 #endif // !REPLICA_STORE_H

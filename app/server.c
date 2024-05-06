@@ -34,6 +34,7 @@ void handle_master(int sockfd);
 volatile sig_atomic_t server_running = 1;
 KeyValueStore store;
 Config config;
+Replicas replicas;
 
 int main(int argc, char *argv[]) {
 
