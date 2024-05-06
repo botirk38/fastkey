@@ -124,6 +124,7 @@ void parse_key_value(FILE *rdb_file, KeyValueStore *store) {
   printf("Value Type: %02X\n", value_type);
 
   int expiry = readLengthEncoding(rdb_file);
+  printf("Expiry: %d\n", expiry);
   // Parse the key as a string
   char *key = readString(rdb_file);
 
