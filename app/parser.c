@@ -150,6 +150,18 @@ void parse_key_value(FILE *rdb_file, KeyValueStore *store, uint64_t expireTime) 
     break;
   }
 
+  case EXPIRETIME: {
+    uint64_t expiry = readLengthEncoding(rdb_file);
+    printf("Key: %s, Expiry: %lu\n", key, expiry);
+    break;
+  }
+
+  case EXPIRETIMEMS: {
+    uint64_t expiry = readLengthEncoding(rdb_file);
+    printf("Key: %s, Expiry: %lu\n", key, expiry);
+    break;
+  }
+
   default:
     printf("Unsupported value type\n");
     break;
