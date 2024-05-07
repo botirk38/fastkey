@@ -342,6 +342,19 @@ char *handlePsync(char **args, int numArgs, bool isSlave) {
   return fullResponse;
 }
 
+char *handleType(char **args, int numArgs, bool isSlave) {
+  if (numArgs < 1) {
+    return strdup("-ERROR Insufficient arguments\r\n");
+  }
+
+  const char *value = getKeyValue(&store, args[0]);
+  if (strcmp(value, "Key not found") == 0) {
+    return strdup("+none\r\n");
+  }
+
+  return strdup("+string\r\n");
+}
+
 char *handleCommand(const char *command, char **args, int numArg,
                     bool isSlave) {
   for (int i = 0; commandTable[i].command != NULL; i++) {
@@ -355,9 +368,17 @@ char *handleCommand(const char *command, char **args, int numArg,
 
 // Command table implementation
 Command commandTable[] = {
-    {"PING", handlePing},   {"ECHO", handleEcho}, {"SET", handleSet},
-    {"GET", handleGet},     {"INFO", handleInfo}, {"REPLCONF", handleReplConf},
-    {"PSYNC", handlePsync}, {"WAIT", handleWait}, {"CONFIG", handleRDBConfig},
-    {"KEYS", handleKeys},   {NULL, NULL} // End of the command table
-                                         //
+    {"PING", handlePing},
+    {"ECHO", handleEcho},
+    {"SET", handleSet},
+    {"GET", handleGet},
+    {"INFO", handleInfo},
+    {"REPLCONF", handleReplConf},
+    {"PSYNC", handlePsync},
+    {"WAIT", handleWait},
+    {"CONFIG", handleRDBConfig},
+    {"KEYS", handleKeys},
+    {"TYPE", handleType},
+    {NULL, NULL} // End of the command table
+                 //
 };
