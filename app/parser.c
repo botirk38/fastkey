@@ -3,7 +3,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdint.h>
 
 #define SELECTDB 0xFE
 #define RESIZEDB 0xFB
@@ -11,7 +10,7 @@
 #define EXPIRETIME 0xFD
 #define EXPIRETIMEMS 0xFC
 #define EOF_OP 0xFF
-#define KEYVALUE 0
+#define KEYVALUE 0x00
 
 RespCommand *parseCommand(char *buffer) {
   RespCommand *command = malloc(sizeof(RespCommand));
@@ -122,15 +121,16 @@ void parse_key_value(FILE *rdb_file, KeyValueStore *store) {
   // Read value type
   unsigned char value_type;
   fread(&value_type, sizeof(unsigned char), 1, rdb_file);
-  printf("Value Type: %02X\n", value_type);
 
   // Parse the key as a string
-  char *key = readString(rdb_file);
-  uint32_t expireTime = 0;
 
   // Parse the value based on the value type
+
+  uint64_t expiry = 0;
   switch (value_type) {
-  case 0x00: { // String encoding
+
+  case KEYVALUE: { // String encoding
+    char *key = readString(rdb_file);
 
     char *value = readString(rdb_file);
 
@@ -140,22 +140,27 @@ void parse_key_value(FILE *rdb_file, KeyValueStore *store) {
 
     break;
   }
-  case EXPIRETIME: {
-    fseek(rdb_file, -1, SEEK_CUR);
-    expireTime = fread(&expireTime, sizeof(uint32_t), 1, rdb_file); 
-    printf("Key: %s, Expire Time: %lu\n", key, expireTime);
-    break;
-  }
 
   case EXPIRETIMEMS: {
-    uint64_t expireTimeMs;
-    fread(&expireTimeMs, sizeof(uint64_t), 1, rdb_file);
-    printf("Key: %s, Expire Time: %lu\n", key, expireTimeMs);
+    fread(&expiry, sizeof(char), 8, rdb_file);
+    fread(&value_type, sizeof(unsigned char), 1, rdb_file);
+
+    printf("Value type: %02X\n", value_type);
+
+    if (value_type == KEYVALUE) {
+      char *key = readString(rdb_file);
+      char *value = readString(rdb_file);
+
+      printf("Key: %s, Value: %s, Expiry: %lu milliseconds\n", key, value,
+             expiry);
+
+      setKeyValue(store, key, value, expiry);
+    }
     break;
   }
 
   default:
-    printf("Unsupported value type\n");
+    printf("Unsupported value type %02X\n", value_type);
     break;
   }
 }
@@ -222,7 +227,19 @@ void parseRDBFile(const char *filename, const char *dir, KeyValueStore *store) {
       free(value);
       break;
     }
-     case EOF_OP: {
+
+    case EXPIRETIME: {
+      expireTime = readLengthEncoding(file);
+      printf("Expire Time: %lu seconds\n", expireTime);
+      break;
+    }
+    case EXPIRETIMEMS: {
+      expireTime = readLengthEncoding(file);
+      printf("Expire Time: %lu milliseconds\n", expireTime);
+      break;
+    }
+
+    case EOF_OP: {
       printf("End of RDB file\n");
       fclose(file);
       return;

@@ -43,12 +43,13 @@ void setKeyValue(KeyValueStore *store, const char *key, const char *value,
   store->store[store->size].expiry = expiryTime;
   store->size++;
 
-  printf("Setting key: %s, value: %s\n", key, value);
+  printf("Setting key: %s, value: %s, expiry: %lld \n,", key, value, expiryTime);
 
   printf("Key set\n");
 }
 
 const char *getKeyValue(KeyValueStore *store, const char *key) {
+
   for (int i = 0; i < store->size; i++) {
     if (strcmp(store->store[i].key, key) == 0) {
       if (store->store[i].expiry == 0 ||
