@@ -1,6 +1,7 @@
 #ifndef KEY_VALUE_STORE_H
 #define KEY_VALUE_STORE_H
 
+#include <stdint.h>
 #define MAX_KEY_LENGTH 100
 #define MAX_VALUE_LENGTH 100
 #define MAX_STORE_LENGTH 1024
@@ -19,7 +20,7 @@ typedef struct {
 } KeyValueStore;
 
 void initKeyValueStore(KeyValueStore *store);
-void setKeyValue(KeyValueStore *store, const char *key, const char *value, int expiry);
+void setKeyValue(KeyValueStore *store, const char *key, const char *value, uint64_t expiry);
 const char *getKeyValue(KeyValueStore *store, const char *key);
 void deleteKeyValue(KeyValueStore *store, int index);
 long long currentTime();

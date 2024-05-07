@@ -21,7 +21,7 @@ long long currentTime() {
 }
 
 void setKeyValue(KeyValueStore *store, const char *key, const char *value,
-                 int expiry) {
+                 uint64_t expiry) {
 
   if (store->size == MAX_STORE_LENGTH) {
     printf("Store is full\n");
@@ -33,17 +33,16 @@ void setKeyValue(KeyValueStore *store, const char *key, const char *value,
     return;
   }
 
-  long long expiryTime =
-      (expiry == 0)
-          ? 0
-          : currentTime() + expiry; // expiry should be in milliseconds
+
+  
+  printf("Current time: %lld\n", currentTime());
 
   store->store[store->size].key = key;
   store->store[store->size].value = value;
-  store->store[store->size].expiry = expiryTime;
+  store->store[store->size].expiry = expiry;
   store->size++;
 
-  printf("Setting key: %s, value: %s, expiry: %lld \n,", key, value, expiryTime);
+  printf("Setting key: %s, value: %s, expiry: %lld \n,", key, value, expiry);
 
   printf("Key set\n");
 }
@@ -52,6 +51,7 @@ const char *getKeyValue(KeyValueStore *store, const char *key) {
 
   for (int i = 0; i < store->size; i++) {
     if (strcmp(store->store[i].key, key) == 0) {
+      printf("Current time GET: %lld\n", currentTime());
       if (store->store[i].expiry == 0 ||
           store->store[i].expiry >= currentTime()) {
 

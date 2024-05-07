@@ -49,7 +49,7 @@ char *handleSet(char **args, int numArgs, bool isSlave) {
   }
   const char *key = args[0];
   const char *value = args[1];
-  int expiry = 0;
+  uint64_t expiry = 0;
 
   if (isSlave) {
     offset += 25 + strlen(key) + strlen(value);
@@ -58,7 +58,8 @@ char *handleSet(char **args, int numArgs, bool isSlave) {
   }
 
   if (numArgs > 3) {
-    expiry = atoi(args[3]);
+    expiry = currentTime() + atoi(args[3]);
+    printf("Expiry in SET: %lld\n", expiry);
 
     if (isSlave) {
       offset += 14 + strlen(args[3]);
@@ -70,7 +71,7 @@ char *handleSet(char **args, int numArgs, bool isSlave) {
 
   // Check for expiry argument which is optional
 
-  printf("Setting key %s to value %s with expiry %d\n", key, value, expiry);
+  printf("Setting key %s to value %s with expiry %lld\n", key, value, expiry);
   setKeyValue(&store, key, value, expiry);
   return strdup("+OK\r\n");
 }
@@ -83,10 +84,16 @@ char *handleGet(char **args, int numArgs, bool isSlave) {
     return strdup("-ERROR Key argument required\r\n");
   }
   const char *value = getKeyValue(&store, args[0]);
-  if (strcmp(value, "Key not found") == 0 ||
-      strcmp(value, "Key has expired") == 0) {
+  if (strcmp(value, "Key not found") == 0) {
+    printf("Key not found\n");
     return strdup("$-1\r\n"); // RESP format for null bulk string
   }
+
+  else if (strcmp(value, "Key has expired") == 0) {
+    printf("Key has expired\n");
+    return strdup("$-1\r\n"); // RESP format for null bulk string
+  }
+
   int len = strlen(value);
   char *response = malloc(len + 20); // Enough space for protocol overhead
 
@@ -146,7 +153,7 @@ char *handleKeys(char **args, int numArgs, bool isSlave) {
 
   // Collect all keys and calculate the needed buffer size
   for (int i = 0; i < size; i++) {
-    keys[i] = strcpy(malloc(MAX_KEY_LENGTH), getKeyAtIdx(&store, i)); 
+    keys[i] = strcpy(malloc(MAX_KEY_LENGTH), getKeyAtIdx(&store, i));
     if (!keys[i]) {
       while (i-- > 0)
         free(keys[i]); // Cleanup on failure
