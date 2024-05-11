@@ -1,4 +1,5 @@
 #include "command-handler.h"
+#include "streams.h"
 #include "utils/KeyValueStore.h"
 #include "utils/utils.h"
 #include <errno.h>
@@ -347,12 +348,50 @@ char *handleType(char **args, int numArgs, bool isSlave) {
     return strdup("-ERROR Insufficient arguments\r\n");
   }
 
-  const char *value = getKeyValue(&store, args[0]);
-  if (strcmp(value, "Key not found") == 0) {
-    return strdup("+none\r\n");
+  const char *type = getType(&store, args[0]);
+
+  if (isSlave) {
+    offset += 14 + strlen(args[0]);
   }
 
-  return strdup("+string\r\n");
+  return strdup(type);
+}
+
+char *handleXadd(char **args, int numArg, bool isSlave) {
+
+  if (numArg < 3) {
+    return strdup("-ERROR Insufficient arguments\r\n");
+  }
+
+  const char *key = args[0];
+  const char *id = args[1];
+  const char **fields = (const char **)(args + 2);
+  int numFields = numArg - 2;
+
+  Stream *stream = findOrCreateStream(&store, strdup(key));
+
+  if (!stream) {
+    return strdup("-ERROR Failed to create stream\r\n");
+  }
+
+  xadd(&store, key, id, fields, numFields);
+
+  if (isSlave) {
+    offset += 14 + strlen(key) + strlen(id);
+    for (int i = 0; i < numFields; i++) {
+      offset += 14 + strlen(fields[i]);
+    }
+  }
+
+  char *response = malloc(strlen(id) + 20);
+
+  if (!response) {
+    return strdup("-ERROR Memory allocation failed\r\n");
+  }
+
+  sprintf(response, "$%lu\r\n%s\r\n", strlen(id), id);
+
+  return response;
 }
 
 char *handleCommand(const char *command, char **args, int numArg,
@@ -379,6 +418,7 @@ Command commandTable[] = {
     {"CONFIG", handleRDBConfig},
     {"KEYS", handleKeys},
     {"TYPE", handleType},
+    {"XADD", handleXadd},
     {NULL, NULL} // End of the command table
                  //
 };

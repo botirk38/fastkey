@@ -134,7 +134,6 @@ void parse_key_value(FILE *rdb_file, KeyValueStore *store) {
 
     char *value = readString(rdb_file);
 
-    printf("Key: %s, Value: %s \n", key, value);
 
     setKeyValue(store, key, value, 0);
 
@@ -151,10 +150,7 @@ void parse_key_value(FILE *rdb_file, KeyValueStore *store) {
       char *key = readString(rdb_file);
       char *value = readString(rdb_file);
 
-      printf("Key: %s, Value: %s, Expiry: %lu milliseconds\n", key, value,
-             expiry);
-
-      setKeyValue(store, key, value, expiry);
+            setKeyValue(store, key, value, expiry);
     }
     break;
   }
@@ -179,7 +175,6 @@ void parseRDBFile(const char *filename, const char *dir, KeyValueStore *store) {
   char magic[6];
   fread(magic, sizeof(char), 5, file);
   magic[5] = '\0';
-  printf("Magic: %s\n", magic);
   if (strcmp(magic, "REDIS") != 0) {
     printf("Error: Invalid RDB file format\n");
     fclose(file);
@@ -189,28 +184,25 @@ void parseRDBFile(const char *filename, const char *dir, KeyValueStore *store) {
   char version[6];
   fread(version, sizeof(char), 4, file);
   version[5] = '\0';
-  printf("Version: %s\n", version);
   int rdbVersion = atoi(version);
-  printf("RDB Version: %d\n", rdbVersion);
 
   // Loop until end of file
   unsigned char opcode;
   uint64_t expireTime = 0;
   while (fread(&opcode, sizeof(opcode), 1, file)) {
 
-    printf("Opcode: %02X\n", opcode);
 
     switch (opcode) {
     case SELECTDB: {
       uint64_t dbNumber = readLengthEncoding(file);
-      printf("Database Selector: %lu\n", dbNumber);
+      printf("Database Selector: %lld\n", dbNumber);
 
       break;
     }
     case RESIZEDB: {
       uint64_t hashTableSize = readLengthEncoding(file);
       uint64_t expireHashTableSize = readLengthEncoding(file);
-      printf("Resizedb: Hash Table Size: %lu, Expire Hash Table Size: %lu\n",
+      printf("Resizedb: Hash Table Size: %lld, Expire Hash Table Size: %lld\n",
              hashTableSize, expireHashTableSize);
 
       for (int i = 0; i < hashTableSize; i++) {
@@ -230,12 +222,12 @@ void parseRDBFile(const char *filename, const char *dir, KeyValueStore *store) {
 
     case EXPIRETIME: {
       expireTime = readLengthEncoding(file);
-      printf("Expire Time: %lu seconds\n", expireTime);
+      printf("Expire Time: %lld seconds\n", expireTime);
       break;
     }
     case EXPIRETIMEMS: {
       expireTime = readLengthEncoding(file);
-      printf("Expire Time: %lu milliseconds\n", expireTime);
+      printf("Expire Time: %lld milliseconds\n", expireTime);
       break;
     }
 

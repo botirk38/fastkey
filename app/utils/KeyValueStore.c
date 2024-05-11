@@ -33,12 +33,10 @@ void setKeyValue(KeyValueStore *store, const char *key, const char *value,
     return;
   }
 
-
-  
   printf("Current time: %lld\n", currentTime());
 
   store->store[store->size].key = key;
-  store->store[store->size].value = value;
+  store->store[store->size].value = (void *)value;
   store->store[store->size].expiry = expiry;
   store->size++;
 
@@ -65,7 +63,7 @@ const char *getKeyValue(KeyValueStore *store, const char *key) {
   return "Key not found";
 }
 
-const char* getKeyAtIdx(KeyValueStore *store, int index) {
+const char *getKeyAtIdx(KeyValueStore *store, int index) {
   if (index < 0 || index >= store->size) {
     return "Invalid index";
   }
@@ -113,3 +111,30 @@ void freeKeyValueStore(KeyValueStore *store) {
 }
 
 int lengthOfStore(KeyValueStore *store) { return store->size; }
+
+KeyValue *findKeyValue(KeyValueStore *store, const char *key) {
+  for (int i = 0; i < store->size; i++) {
+    if (strcmp(store->store[i].key, key) == 0) {
+      return &store->store[i];
+    }
+  }
+  return NULL;
+}
+
+const char *getType(KeyValueStore *store, const char *key) {
+
+  KeyValue *keyValue = findKeyValue(store, key);
+  if (keyValue == NULL) {
+    return "+none\r\n";
+  }
+  switch (keyValue->type) {
+  case STRING:
+    return "+string\r\n";
+
+  case STREAM:
+    return "+stream\r\n";
+
+  default:
+    return "+none\r\n";
+  }
+}

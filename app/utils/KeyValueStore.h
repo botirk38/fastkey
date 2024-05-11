@@ -6,11 +6,18 @@
 #define MAX_VALUE_LENGTH 100
 #define MAX_STORE_LENGTH 1024
 
+typedef enum {
+  STRING,
+  STREAM,
+  NONE,
+
+} DataType;
 
 typedef struct {
   const char *key;
-  const char *value;
+  void *value;
   long long expiry;
+  DataType type;
 } KeyValue;
 
 typedef struct {
@@ -28,5 +35,6 @@ void deleteExpiredKeys(KeyValueStore *store);
 void freeKeyValueStore(KeyValueStore *store);
 int lengthOfStore(KeyValueStore *store);
 const char* getKeyAtIdx(KeyValueStore *store, int idx);
+const char* getType(KeyValueStore *store, const char* key);
 
 #endif // !DEBUG
