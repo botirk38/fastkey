@@ -33,6 +33,7 @@ Stream* findOrCreateStream(KeyValueStore* store,  char *key);
 Result xadd(KeyValueStore *store,  const char *key, const char* id, const char** fields, int numFields);
 int parseEntryID(const char* id, long long* milliseconds, int* sequence);
 char* validateEntryID(Stream *stream, const char* id);
+char* autoGenerateID(Stream *stream, long long milliseconds);
 
 
 #endif // STREAMS_H

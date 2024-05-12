@@ -393,7 +393,13 @@ char *handleXadd(char **args, int numArg, bool isSlave) {
     return strdup("-ERROR Memory allocation failed\r\n");
   }
 
-  sprintf(response, "$%lu\r\n%s\r\n", strlen(id), id);
+  int numEntries = stream->numEntries;
+
+  char *entryId = stream->entries[numEntries - 1].id;
+
+  printf("Entry ID: %s\n", entryId);
+
+  sprintf(response, "$%lu\r\n%s\r\n", strlen(id), stream->entries[numEntries - 1].id);
 
   return response;
 }

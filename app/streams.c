@@ -56,6 +56,18 @@ Result xadd(KeyValueStore *store, const char *key, const char *id,
     return (Result){false, "-ERR Failed to create stream"};
   }
 
+  if(strchr(id, '*')) {
+    long long newMillis;
+
+    if(sscanf(id, "%lld-*", &newMillis) != 1) {
+      return (Result){false, "-ERR Invalid ID format"};
+    }
+
+    id = autoGenerateID(stream, newMillis);
+
+
+  }
+
   char *error = validateEntryID(stream, id);
 
   if (error) {
@@ -106,6 +118,37 @@ int parseEntryID(const char *id, long long *milliseconds, int *sequence) {
 
   return sscanf(id, "%lld-%d", milliseconds, sequence);
 }
+
+char *autoGenerateID(Stream *stream, long long timePart) {
+    int newSeq = 0;
+
+    if (stream->numEntries > 0) {
+        StreamEntry *lastEntry = &stream->entries[stream->numEntries - 1];
+        long long lastMillis;
+        int lastSeq;
+        parseEntryID(lastEntry->id, &lastMillis, &lastSeq);
+
+        if (timePart == lastMillis) {
+            newSeq = lastSeq + 1;
+        } else {
+            newSeq = 0;
+        }
+    } else if (timePart == 0) {
+        newSeq = 1;  // Start at 1 if no existing entries with a zero timestamp
+    }
+
+    char *newID = malloc(30);
+    if (!newID) {
+        perror("Failed to allocate memory for new ID");
+        return NULL;
+    }
+
+    sprintf(newID, "%lld-%d", timePart, newSeq);
+    return newID;
+}
+
+
+
 
 char *validateEntryID(Stream *stream, const char *id) {
   long long newMillis, lastMillis;
