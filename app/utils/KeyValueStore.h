@@ -2,6 +2,8 @@
 #define KEY_VALUE_STORE_H
 
 #include <stdint.h>
+#include "utils.h"
+
 #define MAX_KEY_LENGTH 100
 #define MAX_VALUE_LENGTH 100
 #define MAX_STORE_LENGTH 1024

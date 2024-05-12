@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-
+long long currentTime();
 void toUpper(char *str);
 char* base64_decode(const char* hex);
 char* createRDBFile();

@@ -1,6 +1,15 @@
 #include "utils.h"
 #include <arpa/inet.h>
 #include <stdio.h>
+#include <sys/time.h>
+
+long long currentTime() {
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
+  return (tv.tv_sec * 1000LL) +
+         (tv.tv_usec / 1000LL); // Convert sec to ms and usec to ms
+}
+
 
 void toUpper(char *str) {
 

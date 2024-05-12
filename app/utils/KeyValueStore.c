@@ -3,8 +3,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/time.h>
-#include <time.h>
+#include <stdint.h>
+
 
 void initKeyValueStore(KeyValueStore *keyValueStore) {
 
@@ -13,12 +13,6 @@ void initKeyValueStore(KeyValueStore *keyValueStore) {
       (KeyValue *)malloc(MAX_STORE_LENGTH * sizeof(KeyValue));
 }
 
-long long currentTime() {
-  struct timeval tv;
-  gettimeofday(&tv, NULL);
-  return (tv.tv_sec * 1000LL) +
-         (tv.tv_usec / 1000LL); // Convert sec to ms and usec to ms
-}
 
 void setKeyValue(KeyValueStore *store, const char *key, const char *value,
                  uint64_t expiry) {

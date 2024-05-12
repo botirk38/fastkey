@@ -57,7 +57,12 @@ Result xadd(KeyValueStore *store, const char *key, const char *id,
   }
 
   char *generatedID = NULL;
-  if (strchr(id, '*')) {
+
+  if (strcmp(id, "*") == 0) {
+    printf("Auto-generating ID\n");
+    generatedID = autoGenerateIDFull(stream);
+    id = generatedID;
+  } else if (strchr(id, '*')) {
     long long newMillis;
     if (sscanf(id, "%lld-*", &newMillis) != 1) {
       return (Result){false, "-ERR Invalid ID format"};
@@ -148,6 +153,37 @@ char *autoGenerateID(Stream *stream, long long timePart) {
   }
 
   snprintf(newID, 30, "%lld-%d", timePart, newSeq);
+  return newID;
+}
+
+char *autoGenerateIDFull(Stream *stream) {
+
+  long long newMillis = currentTime();
+  int newSeq = 0;
+
+  if (stream->numEntries > 0) {
+    StreamEntry *lastEntry = &stream->entries[stream->numEntries - 1];
+    long long lastMillis;
+    int lastSeq;
+    parseEntryID(lastEntry->id, &lastMillis, &lastSeq);
+
+    if (newMillis == lastMillis) {
+      newSeq = lastSeq + 1;
+    } else {
+      newSeq = 0;
+    }
+  }
+
+  char *newID = malloc(30);
+  if (!newID) {
+    perror("Failed to allocate memory for new ID");
+    return NULL;
+  }
+
+  snprintf(newID, 30, "%lld-%d", newMillis, newSeq);
+
+  printf("Generated ID: %s\n", newID);
+
   return newID;
 }
 

@@ -265,11 +265,6 @@ char *handleReplConf(char **args, int numArgs, bool isSlave) {
   return response;
 }
 
-int getCurrentTimeMillis() {
-  struct timeval tv;
-  gettimeofday(&tv, NULL);
-  return tv.tv_sec * 1000 + tv.tv_usec / 1000;
-}
 char *handleWait(char **args, int numArgs, bool isSlave) {
   if (numArgs < 3) {
     return strdup("-ERROR Insufficient arguments\r\n");
@@ -358,51 +353,49 @@ char *handleType(char **args, int numArgs, bool isSlave) {
 }
 
 char *handleXadd(char **args, int numArg, bool isSlave) {
-
-  if (numArg < 3) {
+  if (numArg < 3) {  // Minimum args should be key, id, and at least one field.
     return strdup("-ERROR Insufficient arguments\r\n");
   }
 
   const char *key = args[0];
   const char *id = args[1];
   const char **fields = (const char **)(args + 2);
-  int numFields = numArg - 2;
+  int numFields = numArg - 2; // Subtract key and id from total arguments.
 
   Stream *stream = findOrCreateStream(&store, strdup(key));
-
   if (!stream) {
     return strdup("-ERROR Failed to create stream\r\n");
   }
 
   Result res = xadd(&store, key, id, fields, numFields);
-
   if (!res.success) {
     return strdup(res.message);
   }
 
   if (isSlave) {
+    // Increment replication offset based on the key, id, and field data.
     offset += 14 + strlen(key) + strlen(id);
     for (int i = 0; i < numFields; i++) {
       offset += 14 + strlen(fields[i]);
     }
   }
 
-  char *response = malloc(strlen(id) + 20);
+  // Retrieve the latest entry ID from the stream.
+  int numEntries = stream->numEntries;
+  char *entryId = stream->entries[numEntries - 1].id;
 
+  // Calculate the length of the RESP string.
+  size_t len = strlen(entryId);
+  char *response = malloc(len + 20);  // Allocate space for formatting.
   if (!response) {
     return strdup("-ERROR Memory allocation failed\r\n");
   }
 
-  int numEntries = stream->numEntries;
-
-  char *entryId = stream->entries[numEntries - 1].id;
-
-  printf("Entry ID: %s\n", entryId);
-
-  sprintf(response, "$%lu\r\n%s\r\n", strlen(id), stream->entries[numEntries - 1].id);
-
+  // Format the response as a RESP bulk string.
+  sprintf(response, "$%zu\r\n%s\r\n", len, entryId);
   return response;
 }
+
 
 char *handleCommand(const char *command, char **args, int numArg,
                     bool isSlave) {
