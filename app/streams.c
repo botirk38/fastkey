@@ -147,7 +147,7 @@ char *autoGenerateID(Stream *stream, long long timePart) {
     return NULL;
   }
 
-  sprintf(newID, "%lld-%d", timePart, newSeq);
+  snprintf(newID, 30, "%lld-%d", timePart, newSeq);
   return newID;
 }
 
