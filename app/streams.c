@@ -47,13 +47,21 @@ Stream *findOrCreateStream(KeyValueStore *store, char *key) {
   return stream;
 }
 
-void xadd(KeyValueStore *store, const char *key, const char *id,
-          const char **fields, int numFields) {
+Result xadd(KeyValueStore *store, const char *key, const char *id,
+            const char **fields, int numFields) {
 
   Stream *stream = findOrCreateStream(store, strdup(key));
 
   if (!stream) {
-    return;
+    return (Result){false, "-ERR Failed to create stream"};
+  }
+
+  char *error = validateEntryID(stream, id);
+
+  if (error) {
+    fprintf(stderr, "%s", error);
+
+    return (Result){false, error};
   }
 
   // Check if the stream's current capacity needs to be increased
@@ -63,7 +71,8 @@ void xadd(KeyValueStore *store, const char *key, const char *id,
         realloc(stream->entries, newCapacity * sizeof(StreamEntry));
     if (!newEntries) {
       fprintf(stderr, "Failed to reallocate memory for stream entries\n");
-      return;
+      return (Result){false,
+                      "-ERR Failed to reallocate memory for stream entries"};
     }
     stream->entries = newEntries;
     stream->maxEntries = newCapacity;
@@ -77,7 +86,8 @@ void xadd(KeyValueStore *store, const char *key, const char *id,
   if (!entry->fields) {
     perror("Failed to allocate memory for entry fields");
     free(entry->id);
-    return;
+
+    return (Result){false, "-ERR Failed to allocate memory for entry fields"};
   }
 
   // Populate the fields of the entry
@@ -88,4 +98,50 @@ void xadd(KeyValueStore *store, const char *key, const char *id,
   }
 
   stream->numEntries++;
+
+  return (Result){true, "OK"};
+}
+
+int parseEntryID(const char *id, long long *milliseconds, int *sequence) {
+
+  return sscanf(id, "%lld-%d", milliseconds, sequence);
+}
+
+char *validateEntryID(Stream *stream, const char *id) {
+  long long newMillis, lastMillis;
+  int newSeq, lastSeq;
+
+  printf("ID: %s\n", id);
+
+  if (parseEntryID(id, &newMillis, &newSeq) != 2) {
+    return "-ERR Invalid ID format\r\n";
+  }
+
+  printf("New millis: %lld, new seq: %d\n", newMillis, newSeq);
+
+  if (stream->numEntries > 0) {
+
+    StreamEntry *lastEntry = &stream->entries[stream->numEntries - 1];
+    parseEntryID(lastEntry->id, &lastMillis, &lastSeq);
+
+    printf("Last millis: %lld, last seq: %d\n", lastMillis, lastSeq);
+
+    if (newMillis == 0 && newSeq == 0) {
+      return "-ERR The ID specified in XADD must be greater than 0-0\r\n";
+    }
+
+    if (newMillis < lastMillis ||
+        (newMillis == lastMillis && newSeq <= lastSeq)) {
+      return "-ERR The ID specified in XADD is equal or smaller than the "
+             "target stream top item\r\n";
+    }
+  } else {
+    printf("No entries\n");
+
+    if (newMillis == 0 && newSeq == 0) {
+      return "-ERR The ID specified in XADD must be greater than 0-0\r\n";
+    }
+  }
+
+  return NULL;
 }

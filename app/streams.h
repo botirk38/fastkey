@@ -3,6 +3,7 @@
 
 
 #include "utils/KeyValueStore.h"
+#include <stdbool.h>
 typedef struct {
   char *key;
   char *value;
@@ -22,8 +23,16 @@ typedef struct {
   int maxEntries;
 } Stream;
 
+typedef struct {
+  bool success;
+  char *message;
+
+} Result;
+
 Stream* findOrCreateStream(KeyValueStore* store,  char *key);
-void xadd(KeyValueStore *store,  const char *key, const char* id, const char** fields, int numFields);
+Result xadd(KeyValueStore *store,  const char *key, const char* id, const char** fields, int numFields);
+int parseEntryID(const char* id, long long* milliseconds, int* sequence);
+char* validateEntryID(Stream *stream, const char* id);
 
 
 #endif // STREAMS_H

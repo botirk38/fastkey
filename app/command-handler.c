@@ -374,7 +374,11 @@ char *handleXadd(char **args, int numArg, bool isSlave) {
     return strdup("-ERROR Failed to create stream\r\n");
   }
 
-  xadd(&store, key, id, fields, numFields);
+  Result res = xadd(&store, key, id, fields, numFields);
+
+  if (!res.success) {
+    return strdup(res.message);
+  }
 
   if (isSlave) {
     offset += 14 + strlen(key) + strlen(id);
