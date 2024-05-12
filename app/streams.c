@@ -56,23 +56,24 @@ Result xadd(KeyValueStore *store, const char *key, const char *id,
     return (Result){false, "-ERR Failed to create stream"};
   }
 
-  if(strchr(id, '*')) {
+  char *generatedID = NULL;
+  if (strchr(id, '*')) {
     long long newMillis;
-
-    if(sscanf(id, "%lld-*", &newMillis) != 1) {
+    if (sscanf(id, "%lld-*", &newMillis) != 1) {
       return (Result){false, "-ERR Invalid ID format"};
     }
-
-    id = autoGenerateID(stream, newMillis);
-
-
+    generatedID = autoGenerateID(stream, newMillis);
+    if (!generatedID) {
+      return (Result){false, "-ERR Failed to generate an ID"};
+    }
+    id = generatedID;
   }
 
   char *error = validateEntryID(stream, id);
 
   if (error) {
     fprintf(stderr, "%s", error);
-
+    free(generatedID);
     return (Result){false, error};
   }
 
@@ -98,6 +99,7 @@ Result xadd(KeyValueStore *store, const char *key, const char *id,
   if (!entry->fields) {
     perror("Failed to allocate memory for entry fields");
     free(entry->id);
+    free(generatedID);
 
     return (Result){false, "-ERR Failed to allocate memory for entry fields"};
   }
@@ -111,6 +113,8 @@ Result xadd(KeyValueStore *store, const char *key, const char *id,
 
   stream->numEntries++;
 
+  free(generatedID);
+
   return (Result){true, "OK"};
 }
 
@@ -120,35 +124,32 @@ int parseEntryID(const char *id, long long *milliseconds, int *sequence) {
 }
 
 char *autoGenerateID(Stream *stream, long long timePart) {
-    int newSeq = 0;
+  int newSeq = 0;
 
-    if (stream->numEntries > 0) {
-        StreamEntry *lastEntry = &stream->entries[stream->numEntries - 1];
-        long long lastMillis;
-        int lastSeq;
-        parseEntryID(lastEntry->id, &lastMillis, &lastSeq);
+  if (stream->numEntries > 0) {
+    StreamEntry *lastEntry = &stream->entries[stream->numEntries - 1];
+    long long lastMillis;
+    int lastSeq;
+    parseEntryID(lastEntry->id, &lastMillis, &lastSeq);
 
-        if (timePart == lastMillis) {
-            newSeq = lastSeq + 1;
-        } else {
-            newSeq = 0;
-        }
-    } else if (timePart == 0) {
-        newSeq = 1;  // Start at 1 if no existing entries with a zero timestamp
+    if (timePart == lastMillis) {
+      newSeq = lastSeq + 1;
+    } else {
+      newSeq = 0;
     }
+  } else if (timePart == 0) {
+    newSeq = 1; // Start at 1 if no existing entries with a zero timestamp
+  }
 
-    char *newID = malloc(30);
-    if (!newID) {
-        perror("Failed to allocate memory for new ID");
-        return NULL;
-    }
+  char *newID = malloc(30);
+  if (!newID) {
+    perror("Failed to allocate memory for new ID");
+    return NULL;
+  }
 
-    sprintf(newID, "%lld-%d", timePart, newSeq);
-    return newID;
+  sprintf(newID, "%lld-%d", timePart, newSeq);
+  return newID;
 }
-
-
-
 
 char *validateEntryID(Stream *stream, const char *id) {
   long long newMillis, lastMillis;
