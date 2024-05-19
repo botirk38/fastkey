@@ -353,7 +353,7 @@ char *handleType(char **args, int numArgs, bool isSlave) {
 }
 
 char *handleXadd(char **args, int numArg, bool isSlave) {
-  if (numArg < 3) {  // Minimum args should be key, id, and at least one field.
+  if (numArg < 3) { // Minimum args should be key, id, and at least one field.
     return strdup("-ERROR Insufficient arguments\r\n");
   }
 
@@ -386,7 +386,7 @@ char *handleXadd(char **args, int numArg, bool isSlave) {
 
   // Calculate the length of the RESP string.
   size_t len = strlen(entryId);
-  char *response = malloc(len + 20);  // Allocate space for formatting.
+  char *response = malloc(len + 20); // Allocate space for formatting.
   if (!response) {
     return strdup("-ERROR Memory allocation failed\r\n");
   }
@@ -396,6 +396,24 @@ char *handleXadd(char **args, int numArg, bool isSlave) {
   return response;
 }
 
+char *handleXrange(char **args, int numArg, bool isSlave) {
+
+  if (numArg < 3) {
+    return strdup("-ERROR Insufficient arguments\r\n");
+  }
+
+  const char *key = args[0];
+  const char *startID = args[1];
+  const char *endID = args[2];
+
+  Result res = xrange(&store, key, startID, endID);
+
+  if (isSlave) {
+    offset += 14 + strlen(key) + strlen(startID) + strlen(endID);
+  }
+
+  return strdup(res.message);
+}
 
 char *handleCommand(const char *command, char **args, int numArg,
                     bool isSlave) {
@@ -422,6 +440,7 @@ Command commandTable[] = {
     {"KEYS", handleKeys},
     {"TYPE", handleType},
     {"XADD", handleXadd},
+    {"XRANGE", handleXrange},
     {NULL, NULL} // End of the command table
                  //
 };

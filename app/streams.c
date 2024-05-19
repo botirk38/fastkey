@@ -1,5 +1,6 @@
 #include "streams.h"
 #include "utils/KeyValueStore.h"
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -98,8 +99,10 @@ Result xadd(KeyValueStore *store, const char *key, const char *id,
 
   StreamEntry *entry = &stream->entries[stream->numEntries];
   entry->id = strdup(id);
-  entry->numFields = numFields;
+  entry->numFields = numFields - 1;
   entry->fields = (EntryField *)malloc(sizeof(EntryField) * numFields);
+
+  printf("Num fields: %d\n", numFields);
 
   if (!entry->fields) {
     perror("Failed to allocate memory for entry fields");
@@ -112,8 +115,8 @@ Result xadd(KeyValueStore *store, const char *key, const char *id,
   // Populate the fields of the entry
   for (int i = 0; i < numFields;
        i += 2) { // Assume fields are in key-value pairs
-    entry->fields[i / 2].key = strdup(fields[i]);
-    entry->fields[i / 2].value = strdup(fields[i + 1]);
+    entry->fields[i].key = strdup(fields[i]);
+    entry->fields[i].value = strdup(fields[i + 1]);
   }
 
   stream->numEntries++;
@@ -121,6 +124,82 @@ Result xadd(KeyValueStore *store, const char *key, const char *id,
   free(generatedID);
 
   return (Result){true, "OK"};
+}
+
+Result xrange(KeyValueStore *store, const char *key, const char *start,
+              const char *end) {
+  Stream *stream = findOrCreateStream(store, strdup(key));
+  if (!stream) {
+    return (Result){false, "-ERR Stream not found"};
+  }
+
+  long long startMillis, endMillis;
+  int startSeq = 0, endSeq = INT_MAX;
+
+  // Parse start and end IDs
+  if (parseEntryID(start, &startMillis, &startSeq) != 2) {
+    return (Result){false, "-ERR Invalid start ID format"};
+  }
+  if (parseEntryID(end, &endMillis, &endSeq) != 2) {
+    return (Result){false, "-ERR Invalid end ID format"};
+  }
+
+  if (startMillis > endMillis ||
+      (startMillis == endMillis && startSeq > endSeq)) {
+    return (Result){false,
+                    "-ERR Start ID must be less than or equal to End ID"};
+  }
+
+  // First pass: count the matching entries
+  int entryCount = 0;
+  for (int i = 0; i < stream->numEntries; i++) {
+    StreamEntry entry = stream->entries[i];
+    long long entryMillis;
+    int entrySeq;
+    parseEntryID(entry.id, &entryMillis, &entrySeq);
+
+    if ((entryMillis > startMillis ||
+         (entryMillis == startMillis && entrySeq >= startSeq)) &&
+        (entryMillis < endMillis ||
+         (entryMillis == endMillis && entrySeq <= endSeq))) {
+      entryCount++;
+    }
+  }
+
+  // Allocate memory based on entry count
+  int bufferSize =
+      1024 *
+      entryCount; // Assuming each entry takes up to 1024 bytes on average
+  char respArray[bufferSize];
+
+  // Second pass: format the response
+  char *ptr = respArray;
+  ptr += sprintf(ptr, "*%d\r\n", entryCount);
+
+  for (int i = 0; i < stream->numEntries; i++) {
+    StreamEntry entry = stream->entries[i];
+    long long entryMillis;
+    int entrySeq;
+    parseEntryID(entry.id, &entryMillis, &entrySeq);
+
+    if ((entryMillis > startMillis ||
+         (entryMillis == startMillis && entrySeq >= startSeq)) &&
+        (entryMillis < endMillis ||
+         (entryMillis == endMillis && entrySeq <= endSeq))) {
+      ptr += sprintf(ptr, "*2\r\n$%zd\r\n%s\r\n*%d\r\n", strlen(entry.id),
+                     entry.id, 1 * 2);
+
+       for (int j = 0; j < entry.numFields; ++j) {
+        printf("J: %d\n", j);
+        printf("Num fields: %d\n", entry.numFields);
+        printf("Key: %s, Value: %s\n", entry.fields[j].key, entry.fields[j].value);
+                ptr += sprintf(ptr, "$%zd\r\n%s\r\n$%zd\r\n%s\r\n", strlen(entry.fields[j].key), entry.fields[j].key, strlen(entry.fields[j].value), entry.fields[j].value);
+            }
+     
+    }
+  }
+
+  return (Result){true, respArray};
 }
 
 int parseEntryID(const char *id, long long *milliseconds, int *sequence) {
