@@ -126,77 +126,90 @@ Result xadd(KeyValueStore *store, const char *key, const char *id,
   return (Result){true, "OK"};
 }
 
-Result xrange(KeyValueStore *store, const char *key, const char *start, const char *end) {
-    Stream *stream = findOrCreateStream(store, strdup(key));
-    if (!stream) {
-        return (Result){false, "-ERR Stream not found"};
+Result xrange(KeyValueStore *store, const char *key, const char *start,
+              const char *end) {
+  Stream *stream = findOrCreateStream(store, strdup(key));
+  if (!stream) {
+    return (Result){false, "-ERR Stream not found"};
+  }
+
+  long long startMillis = LLONG_MIN, endMillis = LLONG_MAX;
+  int startSeq = 0, endSeq = INT_MAX;
+
+  // Handling the start as '-' indicating the beginning of the stream
+  if (strcmp(start, "-") != 0) {
+    if (parseEntryID(start, &startMillis, &startSeq) != 2) {
+      return (Result){false, "-ERR Invalid start ID format"};
     }
+  }
 
-    long long startMillis = LLONG_MIN, endMillis;
-    int startSeq = 0, endSeq = INT_MAX;
-
-    // Handling the start as '-' indicating the beginning of the stream
-    if (strcmp(start, "-") != 0) {
-        if (parseEntryID(start, &startMillis, &startSeq) != 2) {
-            return (Result){false, "-ERR Invalid start ID format"};
-        }
-    }
-
-    // Parsing the end ID
+  // Parsing the end ID
+  if (strcmp(end, "+") != 0) {
     if (parseEntryID(end, &endMillis, &endSeq) != 2) {
-        return (Result){false, "-ERR Invalid end ID format"};
+      return (Result){false, "-ERR Invalid end ID format"};
     }
+  }
 
-    // Check logical order of start and end IDs, unless start is the beginning of the stream
-    if (strcmp(start, "-") != 0 && (startMillis > endMillis ||
-                                    (startMillis == endMillis && startSeq > endSeq))) {
-        return (Result){false, "-ERR Start ID must be less than or equal to End ID"};
+  // Check logical order of start and end IDs, unless start is the beginning of
+  // the stream
+  if ((strcmp(start, "-") != 0 || strcmp(end, "+") != 0) &&
+      (startMillis > endMillis ||
+       (startMillis == endMillis && startSeq > endSeq))) {
+    return (Result){false,
+                    "-ERR Start ID must be less than or equal to End ID"};
+  }
+
+  // First pass: count the matching entries
+  int entryCount = 0;
+  for (int i = 0; i < stream->numEntries; i++) {
+    StreamEntry entry = stream->entries[i];
+    long long entryMillis;
+    int entrySeq;
+    parseEntryID(entry.id, &entryMillis, &entrySeq);
+
+    if ((strcmp(start, "-") == 0 || entryMillis > startMillis ||
+         (entryMillis == startMillis && entrySeq >= startSeq)) &&
+        (entryMillis < endMillis ||
+         (entryMillis == endMillis && entrySeq <= endSeq))) {
+      entryCount++;
     }
+  }
 
-    // First pass: count the matching entries
-    int entryCount = 0;
-    for (int i = 0; i < stream->numEntries; i++) {
-        StreamEntry entry = stream->entries[i];
-        long long entryMillis;
-        int entrySeq;
-        parseEntryID(entry.id, &entryMillis, &entrySeq);
+  // Allocate memory based on entry count
+  int bufferSize =
+      1024 *
+      entryCount; // Assuming each entry takes up to 1024 bytes on average
+  char *respArray = malloc(bufferSize);
+  if (!respArray) {
+    perror("Failed to allocate memory for response");
+    return (Result){false, "-ERR Memory allocation failure"};
+  }
 
-        if ((strcmp(start, "-") == 0 || entryMillis > startMillis ||
-             (entryMillis == startMillis && entrySeq >= startSeq)) &&
-            (entryMillis < endMillis || (entryMillis == endMillis && entrySeq <= endSeq))) {
-            entryCount++;
-        }
+  // Second pass: format the response
+  char *ptr = respArray;
+  ptr += sprintf(ptr, "*%d\r\n", entryCount);
+
+  for (int i = 0; i < stream->numEntries; i++) {
+    StreamEntry entry = stream->entries[i];
+    long long entryMillis;
+    int entrySeq;
+    parseEntryID(entry.id, &entryMillis, &entrySeq);
+
+    if ((strcmp(start, "-") == 0 || entryMillis > startMillis ||
+         (entryMillis == startMillis && entrySeq >= startSeq)) &&
+        (entryMillis < endMillis ||
+         (entryMillis == endMillis && entrySeq <= endSeq))) {
+      ptr += sprintf(ptr, "*2\r\n$%zd\r\n%s\r\n*%d\r\n", strlen(entry.id),
+                     entry.id, entry.numFields * 2);
+      for (int j = 0; j < entry.numFields; j++) {
+        ptr += sprintf(ptr, "$%zd\r\n%s\r\n$%zd\r\n%s\r\n",
+                       strlen(entry.fields[j].key), entry.fields[j].key,
+                       strlen(entry.fields[j].value), entry.fields[j].value);
+      }
     }
+  }
 
-    // Allocate memory based on entry count
-    int bufferSize = 1024 * entryCount; // Assuming each entry takes up to 1024 bytes on average
-    char *respArray = malloc(bufferSize);
-    if (!respArray) {
-        perror("Failed to allocate memory for response");
-        return (Result){false, "-ERR Memory allocation failure"};
-    }
-
-    // Second pass: format the response
-    char *ptr = respArray;
-    ptr += sprintf(ptr, "*%d\r\n", entryCount);
-
-    for (int i = 0; i < stream->numEntries; i++) {
-        StreamEntry entry = stream->entries[i];
-        long long entryMillis;
-        int entrySeq;
-        parseEntryID(entry.id, &entryMillis, &entrySeq);
-
-        if ((strcmp(start, "-") == 0 || entryMillis > startMillis ||
-             (entryMillis == startMillis && entrySeq >= startSeq)) &&
-            (entryMillis < endMillis || (entryMillis == endMillis && entrySeq <= endSeq))) {
-            ptr += sprintf(ptr, "*2\r\n$%zd\r\n%s\r\n*%d\r\n", strlen(entry.id), entry.id, entry.numFields * 2);
-            for (int j = 0; j < entry.numFields; j++) {
-                ptr += sprintf(ptr, "$%zd\r\n%s\r\n$%zd\r\n%s\r\n", strlen(entry.fields[j].key), entry.fields[j].key, strlen(entry.fields[j].value), entry.fields[j].value);
-            }
-        }
-    }
-
-    return (Result){true, respArray};
+  return (Result){true, respArray};
 }
 
 int parseEntryID(const char *id, long long *milliseconds, int *sequence) {
