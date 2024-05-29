@@ -126,6 +126,68 @@ Result xadd(KeyValueStore *store, const char *key, const char *id,
   return (Result){true, "OK"};
 }
 
+Result xread(KeyValueStore *store, const char *key, const char *id) {
+
+  Stream *stream = findOrCreateStream(store, strdup(key));
+
+  if (!stream) {
+    return (Result){false, "-ERR Stream not found"};
+  }
+
+  long long startMillis;
+  int startSeq;
+
+  if (strcmp(id, "-") != 0) {
+    if (parseEntryID(id, &startMillis, &startSeq) != 2) {
+      return (Result){false, "-ERR Invalid start ID format"};
+    }
+  }
+
+  // Check if the stream has entries greater than the provided ID
+  int entryCount = 0;
+  for (int i = 0; i < stream->numEntries; i++) {
+    StreamEntry entry = stream->entries[i];
+    long long entryMillis;
+    int entrySeq;
+    parseEntryID(entry.id, &entryMillis, &entrySeq);
+
+    if (entryMillis > startMillis ||
+        (entryMillis == startMillis && entrySeq > startSeq)) {
+      entryCount++;
+    }
+  }
+
+  if (entryCount == 0) {
+    return (Result){true, "*1\r\n*2\r\n$9\r\nstream_key\r\n*0\r\n"};
+  }
+
+  int bufferSize = 1024 * entryCount;
+  char respArray[bufferSize];
+
+  char *ptr = respArray;
+  ptr += sprintf(ptr, "*1\r\n*2\r\n$%zu\r\n%s\r\n*%d\r\n", strlen(key), key,
+                 entryCount);
+
+   for (int i = 0; i < stream->numEntries; i++) {
+        StreamEntry entry = stream->entries[i];
+        long long entryMillis;
+        int entrySeq;
+        parseEntryID(entry.id, &entryMillis, &entrySeq);
+
+        if (entryMillis > startMillis || 
+            (entryMillis == startMillis && entrySeq > startSeq)) {
+            ptr += sprintf(ptr, "*2\r\n$%zu\r\n%s\r\n*%d\r\n", strlen(entry.id), entry.id, entry.numFields * 2);
+            for (int j = 0; j < entry.numFields; j++) {
+                ptr += sprintf(ptr, "$%zu\r\n%s\r\n$%zu\r\n%s\r\n", 
+                               strlen(entry.fields[j].key), entry.fields[j].key, 
+                               strlen(entry.fields[j].value), entry.fields[j].value);
+            }
+        }
+    }
+
+    return (Result){true, respArray};
+}
+
 Result xrange(KeyValueStore *store, const char *key, const char *start,
               const char *end) {
   Stream *stream = findOrCreateStream(store, strdup(key));

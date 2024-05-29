@@ -415,6 +415,20 @@ char *handleXrange(char **args, int numArg, bool isSlave) {
   return strdup(res.message);
 }
 
+char *handleXread(char **args, int numArg, bool isSlave) {
+
+  char *key = args[1];
+  char *id = args[2];
+
+  if (isSlave) {
+    offset += 14 + strlen(key) + strlen(id);
+  }
+
+  Result res = xread(&store, key, id);
+
+  return strdup(res.message);
+}
+
 char *handleCommand(const char *command, char **args, int numArg,
                     bool isSlave) {
   for (int i = 0; commandTable[i].command != NULL; i++) {
@@ -441,6 +455,7 @@ Command commandTable[] = {
     {"TYPE", handleType},
     {"XADD", handleXadd},
     {"XRANGE", handleXrange},
+    {"XREAD", handleXread},
     {NULL, NULL} // End of the command table
                  //
 };

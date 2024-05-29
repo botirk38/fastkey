@@ -36,6 +36,7 @@ typedef struct {
 Stream* findOrCreateStream(KeyValueStore* store,  char *key);
 Result xadd(KeyValueStore *store,  const char *key, const char* id, const char** fields, int numFields);
 Result xrange(KeyValueStore* store, const char* key, const char* start, const char* end);
+Result xread(KeyValueStore* store, const char* key, const char* id);
 int parseEntryID(const char* id, long long* milliseconds, int* sequence);
 char* validateEntryID(Stream *stream, const char* id);
 char* autoGenerateID(Stream *stream, long long milliseconds);

@@ -40,6 +40,7 @@ char *handleRDBConfig(char **args, int numArgs, bool isSlave);
 char *handleType(char **args, int numArgs, bool isSlave);
 char *handleXadd(char **args, int numArgs, bool isSlave);
 char* handleXrange(char **args, int numArgs, bool isSlave);
+char* handleXread(char **args, int numArgs, bool isSlave);
 
 void ackReceived();
 
