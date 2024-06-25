@@ -416,17 +416,40 @@ char *handleXrange(char **args, int numArg, bool isSlave) {
 }
 
 char *handleXread(char **args, int numArg, bool isSlave) {
-
-  char *key = args[1];
-  char *id = args[2];
-
-  if (isSlave) {
-    offset += 14 + strlen(key) + strlen(id);
+  if (numArg < 3) {
+    return strdup("-ERR Insufficient arguments\r\n");
   }
 
-  Result res = xread(&store, key, id);
+  if (strcmp(args[0], "streams") != 0) {
+    return strdup("-ERR Expected 'streams' keyword\r\n");
+  }
 
-  return strdup(res.message);
+  int numStreams = (numArg - 1) / 2;
+  if (numArg != 1 + 2 * numStreams) {
+    return strdup("-ERR Insufficient arguments\r\n");
+  }
+
+  const char **keys = (const char **)malloc(sizeof(char *) * numStreams);
+  const char **ids = (const char **)malloc(sizeof(char *) * numStreams);
+
+  if (!keys || !ids) {
+    free(keys);
+    free(ids);
+    return strdup("-ERR Memory allocation failed\r\n");
+  }
+
+  // Extract keys and IDs
+  for (int i = 0; i < numStreams; i++) {
+    keys[i] = args[1 + i];
+    ids[i] = args[1 + numStreams + i];
+  }
+
+  char *response = xread(keys, ids, numStreams, isSlave, &store);
+
+  free(keys);
+  free(ids);
+
+  return response;
 }
 
 char *handleCommand(const char *command, char **args, int numArg,

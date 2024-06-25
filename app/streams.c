@@ -126,68 +126,73 @@ Result xadd(KeyValueStore *store, const char *key, const char *id,
   return (Result){true, "OK"};
 }
 
-Result xread(KeyValueStore *store, const char *key, const char *id) {
-
-  Stream *stream = findOrCreateStream(store, strdup(key));
-
-  if (!stream) {
-    return (Result){false, "-ERR Stream not found"};
+char *xread(const char **keys, const char **ids, int numStreams, bool isSlave,
+            KeyValueStore *store) {
+  // Prepare the response
+  int bufferSize = 1024;
+  char *respArray = malloc(bufferSize);
+  if (!respArray) {
+    return strdup("-ERR Memory allocation failed\r\n");
   }
-
-  long long startMillis;
-  int startSeq;
-
-  if (strcmp(id, "-") != 0) {
-    if (parseEntryID(id, &startMillis, &startSeq) != 2) {
-      return (Result){false, "-ERR Invalid start ID format"};
-    }
-  }
-
-  // Check if the stream has entries greater than the provided ID
-  int entryCount = 0;
-  for (int i = 0; i < stream->numEntries; i++) {
-    StreamEntry entry = stream->entries[i];
-    long long entryMillis;
-    int entrySeq;
-    parseEntryID(entry.id, &entryMillis, &entrySeq);
-
-    if (entryMillis > startMillis ||
-        (entryMillis == startMillis && entrySeq > startSeq)) {
-      entryCount++;
-    }
-  }
-
-  if (entryCount == 0) {
-    return (Result){true, "*1\r\n*2\r\n$9\r\nstream_key\r\n*0\r\n"};
-  }
-
-  int bufferSize = 1024 * entryCount;
-  char respArray[bufferSize];
 
   char *ptr = respArray;
-  ptr += sprintf(ptr, "*1\r\n*2\r\n$%zu\r\n%s\r\n*%d\r\n", strlen(key), key,
-                 entryCount);
+  ptr += sprintf(ptr, "*%d\r\n", numStreams);
 
-   for (int i = 0; i < stream->numEntries; i++) {
-        StreamEntry entry = stream->entries[i];
-        long long entryMillis;
-        int entrySeq;
-        parseEntryID(entry.id, &entryMillis, &entrySeq);
+  for (int i = 0; i < numStreams; i++) {
+    const char *key = keys[i];
+    const char *id = ids[i];
 
-        if (entryMillis > startMillis || 
-            (entryMillis == startMillis && entrySeq > startSeq)) {
-            ptr += sprintf(ptr, "*2\r\n$%zu\r\n%s\r\n*%d\r\n", strlen(entry.id), entry.id, entry.numFields * 2);
-            for (int j = 0; j < entry.numFields; j++) {
-                ptr += sprintf(ptr, "$%zu\r\n%s\r\n$%zu\r\n%s\r\n", 
-                               strlen(entry.fields[j].key), entry.fields[j].key, 
-                               strlen(entry.fields[j].value), entry.fields[j].value);
-            }
-        }
+    Stream *stream = findOrCreateStream(store, strdup(key));
+    if (!stream) {
+      ptr += sprintf(ptr, "*2\r\n$%zu\r\n%s\r\n*0\r\n", strlen(key), key);
+      continue;
     }
 
-    return (Result){true, respArray};
-}
+    long long startMillis;
+    int startSeq;
 
+    if (parseEntryID(id, &startMillis, &startSeq) != 2) {
+      free(respArray);
+      return strdup("-ERR Invalid start ID format\r\n");
+    }
+
+    int entryCount = 0;
+    for (int j = 0; j < stream->numEntries; j++) {
+      StreamEntry entry = stream->entries[j];
+      long long entryMillis;
+      int entrySeq;
+      parseEntryID(entry.id, &entryMillis, &entrySeq);
+
+      if (entryMillis > startMillis ||
+          (entryMillis == startMillis && entrySeq > startSeq)) {
+        entryCount++;
+      }
+    }
+
+    ptr += sprintf(ptr, "*2\r\n$%zu\r\n%s\r\n*%d\r\n", strlen(key), key,
+                   entryCount);
+
+    for (int j = 0; j < stream->numEntries; j++) {
+      StreamEntry entry = stream->entries[j];
+      long long entryMillis;
+      int entrySeq;
+      parseEntryID(entry.id, &entryMillis, &entrySeq);
+
+      if (entryMillis > startMillis ||
+          (entryMillis == startMillis && entrySeq > startSeq)) {
+        ptr += sprintf(ptr, "*2\r\n$%zu\r\n%s\r\n*%d\r\n", strlen(entry.id),
+                       entry.id, entry.numFields * 2);
+        for (int k = 0; k < entry.numFields; k++) {
+          ptr += sprintf(ptr, "$%zu\r\n%s\r\n$%zu\r\n%s\r\n",
+                         strlen(entry.fields[k].key), entry.fields[k].key,
+                         strlen(entry.fields[k].value), entry.fields[k].value);
+        }
+      }
+    }
+  }
+
+  return respArray;
+}
 Result xrange(KeyValueStore *store, const char *key, const char *start,
               const char *end) {
   Stream *stream = findOrCreateStream(store, strdup(key));
@@ -241,12 +246,7 @@ Result xrange(KeyValueStore *store, const char *key, const char *start,
   int bufferSize =
       1024 *
       entryCount; // Assuming each entry takes up to 1024 bytes on average
-  char *respArray = malloc(bufferSize);
-  if (!respArray) {
-    perror("Failed to allocate memory for response");
-    return (Result){false, "-ERR Memory allocation failure"};
-  }
-
+  char respArray[bufferSize];
   // Second pass: format the response
   char *ptr = respArray;
   ptr += sprintf(ptr, "*%d\r\n", entryCount);
