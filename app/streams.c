@@ -1,9 +1,16 @@
 #include "streams.h"
 #include "utils/KeyValueStore.h"
+#include <errno.h>
 #include <limits.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+#include <unistd.h>
+
+pthread_cond_t stream_cond = PTHREAD_COND_INITIALIZER;
+pthread_mutex_t stream_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 Stream *findOrCreateStream(KeyValueStore *store, char *key) {
 
@@ -127,22 +134,72 @@ Result xadd(KeyValueStore *store, const char *key, const char *id,
 }
 
 char *xread(const char **keys, const char **ids, int numStreams, bool isSlave,
-            KeyValueStore *store) {
-  // Prepare the response
+            KeyValueStore *store, int blockTime) {
+  // Initialize response buffer
   int bufferSize = 1024;
   char *respArray = malloc(bufferSize);
   if (!respArray) {
     return strdup("-ERR Memory allocation failed\r\n");
   }
 
+  // Track if we found any new entries
+  bool foundNewEntries = false;
+  struct timespec endTime;
+  clock_gettime(CLOCK_REALTIME, &endTime);
+  endTime.tv_sec += blockTime / 1000;
+  endTime.tv_nsec += (blockTime % 1000) * 1000000;
+
+  while (!foundNewEntries && blockTime > 0) {
+    for (int i = 0; i < numStreams; i++) {
+      Stream *stream = findOrCreateStream(store, strdup(keys[i]));
+      if (!stream)
+        continue;
+
+      long long startMillis;
+      int startSeq;
+      if (parseEntryID(ids[i], &startMillis, &startSeq) != 2) {
+        free(respArray);
+        return strdup("-ERR Invalid ID format\r\n");
+      }
+
+      // Check for new entries
+      for (int j = 0; j < stream->numEntries; j++) {
+        StreamEntry entry = stream->entries[j];
+        long long entryMillis;
+        int entrySeq;
+        parseEntryID(entry.id, &entryMillis, &entrySeq);
+
+        if (entryMillis > startMillis ||
+            (entryMillis == startMillis && entrySeq > startSeq)) {
+          foundNewEntries = true;
+          break;
+        }
+      }
+      if (foundNewEntries)
+        break;
+    }
+
+    if (!foundNewEntries) {
+      struct timespec now;
+      clock_gettime(CLOCK_REALTIME, &now);
+      if (now.tv_sec > endTime.tv_sec ||
+          (now.tv_sec == endTime.tv_sec && now.tv_nsec >= endTime.tv_nsec)) {
+        free(respArray);
+        return strdup("$-1\r\n");
+      }
+      usleep(10000); // Sleep for 10ms before checking again
+    }
+  }
+
+  // Format response with found entries
   char *ptr = respArray;
   ptr += sprintf(ptr, "*%d\r\n", numStreams);
 
   for (int i = 0; i < numStreams; i++) {
     const char *key = keys[i];
     const char *id = ids[i];
-
     Stream *stream = findOrCreateStream(store, strdup(key));
+
     if (!stream) {
       ptr += sprintf(ptr, "*2\r\n$%zu\r\n%s\r\n*0\r\n", strlen(key), key);
       continue;
@@ -150,12 +207,9 @@ char *xread(const char **keys, const char **ids, int numStreams, bool isSlave,
 
     long long startMillis;
     int startSeq;
+    parseEntryID(id, &startMillis, &startSeq);
 
-    if (parseEntryID(id, &startMillis, &startSeq) != 2) {
-      free(respArray);
-      return strdup("-ERR Invalid start ID format\r\n");
-    }
-
+    // Count matching entries
     int entryCount = 0;
     for (int j = 0; j < stream->numEntries; j++) {
       StreamEntry entry = stream->entries[j];
@@ -169,9 +223,9 @@ char *xread(const char **keys, const char **ids, int numStreams, bool isSlave,
       }
     }
 
+    // Format stream entries
     ptr += sprintf(ptr, "*2\r\n$%zu\r\n%s\r\n*%d\r\n", strlen(key), key,
                    entryCount);
-
     for (int j = 0; j < stream->numEntries; j++) {
       StreamEntry entry = stream->entries[j];
       long long entryMillis;
@@ -193,6 +247,7 @@ char *xread(const char **keys, const char **ids, int numStreams, bool isSlave,
 
   return respArray;
 }
+
 Result xrange(KeyValueStore *store, const char *key, const char *start,
               const char *end) {
   Stream *stream = findOrCreateStream(store, strdup(key));

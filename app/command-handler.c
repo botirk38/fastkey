@@ -420,12 +420,25 @@ char *handleXread(char **args, int numArg, bool isSlave) {
     return strdup("-ERR Insufficient arguments\r\n");
   }
 
-  if (strcmp(args[0], "streams") != 0) {
+  int blockTime = 0; // Default is no blocking
+  int streamsIndex = 0;
+
+  // Check for the "BLOCK" option
+  if (strcmp(args[0], "block") == 0) {
+    if (numArg < 5) {
+      return strdup("-ERR Insufficient arguments for BLOCK\r\n");
+    }
+
+    blockTime = atoi(args[1]);
+    streamsIndex = 2; // Skip "BLOCK" and block time
+  }
+
+  if (strcmp(args[streamsIndex], "streams") != 0) {
     return strdup("-ERR Expected 'streams' keyword\r\n");
   }
 
-  int numStreams = (numArg - 1) / 2;
-  if (numArg != 1 + 2 * numStreams) {
+  int numStreams = (numArg - streamsIndex - 1) / 2;
+  if (numArg != streamsIndex + 1 + 2 * numStreams) {
     return strdup("-ERR Insufficient arguments\r\n");
   }
 
@@ -440,11 +453,11 @@ char *handleXread(char **args, int numArg, bool isSlave) {
 
   // Extract keys and IDs
   for (int i = 0; i < numStreams; i++) {
-    keys[i] = args[1 + i];
-    ids[i] = args[1 + numStreams + i];
+    keys[i] = args[streamsIndex + 1 + i];
+    ids[i] = args[streamsIndex + 1 + numStreams + i];
   }
 
-  char *response = xread(keys, ids, numStreams, isSlave, &store);
+  char *response = xread(keys, ids, numStreams, isSlave, &store, blockTime);
 
   free(keys);
   free(ids);
