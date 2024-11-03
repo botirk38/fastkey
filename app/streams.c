@@ -149,7 +149,9 @@ char *xread(const char **keys, const char **ids, int numStreams, bool isSlave,
   endTime.tv_sec += blockTime / 1000;
   endTime.tv_nsec += (blockTime % 1000) * 1000000;
 
-  while (!foundNewEntries && blockTime > 0) {
+  bool infiniteBlock = (blockTime == 0);
+
+  while (!foundNewEntries) {
     for (int i = 0; i < numStreams; i++) {
       Stream *stream = findOrCreateStream(store, strdup(keys[i]));
       if (!stream)
@@ -180,14 +182,16 @@ char *xread(const char **keys, const char **ids, int numStreams, bool isSlave,
     }
 
     if (!foundNewEntries) {
-      struct timespec now;
-      clock_gettime(CLOCK_REALTIME, &now);
-      if (now.tv_sec > endTime.tv_sec ||
-          (now.tv_sec == endTime.tv_sec && now.tv_nsec >= endTime.tv_nsec)) {
-        free(respArray);
-        return strdup("$-1\r\n");
+      if (!infiniteBlock && blockTime > 0) {
+        usleep(10000); // 10ms sleep
+        blockTime -= 10;
+        if (blockTime <= 0) {
+          free(respArray);
+          return strdup("$-1\r\n");
+        }
+      } else if (infiniteBlock) {
+        usleep(10000); // 10ms sleep for infinite blocking
       }
-      usleep(10000); // Sleep for 10ms before checking again
     }
   }
 
