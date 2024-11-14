@@ -465,6 +465,36 @@ char *handleXread(char **args, int numArg, bool isSlave) {
   return response;
 }
 
+char *handleIncrement(char **args, int numArgs, bool isSlave) {
+  if (numArgs < 1) {
+    return strdup("-ERR Insufficient arguments for INCREMENT\r\n");
+  }
+
+  const char *key = args[0];
+  if (key == NULL) {
+    return strdup("-ERR Key is Null\r\n");
+  }
+
+  long long currentValue = 0;
+  const void *stored_value = getKeyValue(&store, key);
+
+  if (stored_value != NULL) {
+    char *endptr;
+    currentValue = strtoll(stored_value, &endptr, 10);
+  }
+
+  currentValue++;
+
+  char valueStr[32];
+  snprintf(valueStr, sizeof(valueStr), "%lld", currentValue);
+  setKeyValue(&store, key, valueStr, strlen(valueStr) + 1);
+
+  char response[32];
+  snprintf(response, sizeof(response), ":%lld\r\n", currentValue);
+
+  return strdup(response);
+}
+
 char *handleCommand(const char *command, char **args, int numArg,
                     bool isSlave) {
   for (int i = 0; commandTable[i].command != NULL; i++) {
@@ -492,6 +522,7 @@ Command commandTable[] = {
     {"XADD", handleXadd},
     {"XRANGE", handleXrange},
     {"XREAD", handleXread},
+    {"INCR", handleIncrement},
     {NULL, NULL} // End of the command table
                  //
 };
