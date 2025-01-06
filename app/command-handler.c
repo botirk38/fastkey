@@ -15,6 +15,9 @@ int replicasProcessed;
 size_t offset = 0;
 size_t masterOffset = 0;
 
+extern Command commandTable[];
+extern RDBConfig rdbConfig;
+extern KeyValueStore store;
 // Global mutex and condition variable
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
@@ -78,31 +81,34 @@ char *handleSet(char **args, int numArgs, bool isSlave) {
 }
 
 char *handleGet(char **args, int numArgs, bool isSlave) {
-
-  (void)numArgs; // Unused parameter
+  printf("Starting GET command handling\n");
 
   if (args[0] == NULL) {
+    printf("Error: Key argument required\n");
     return strdup("-ERROR Key argument required\r\n");
   }
+
+  printf("Fetching value for key: %s\n", args[0]);
   const char *value = getKeyValue(&store, args[0]);
-  if (strcmp(value, "Key not found") == 0) {
-    printf("Key not found\n");
+
+  if (value == NULL) {
+    printf("Key not found or expired\n");
     return strdup("$-1\r\n"); // RESP format for null bulk string
   }
 
-  else if (strcmp(value, "Key has expired") == 0) {
-    printf("Key has expired\n");
-    return strdup("$-1\r\n"); // RESP format for null bulk string
-  }
-
+  printf("Found value: %s\n", value);
   int len = strlen(value);
-  char *response = malloc(len + 20); // Enough space for protocol overhead
+  printf("Value length: %d\n", len);
 
+  char *response = malloc(len + 20); // Enough space for protocol overhead
   if (response == NULL) {
+    printf("Error: Memory allocation failed\n");
     return strdup("-ERROR Memory allocation failed\r\n");
   }
 
   sprintf(response, "$%d\r\n%s\r\n", len, value);
+  printf("Prepared response: %s\n", response);
+
   return response;
 }
 
@@ -466,12 +472,18 @@ char *handleXread(char **args, int numArg, bool isSlave) {
 }
 
 char *handleIncrement(char **args, int numArgs, bool isSlave) {
+  printf("Starting INCR command handling\n");
+
   if (numArgs < 1) {
+    printf("Error: Insufficient arguments for INCR\n");
     return strdup("-ERR Insufficient arguments for INCREMENT\r\n");
   }
 
   const char *key = args[0];
+  printf("Processing INCR for key: %s\n", key);
+
   if (key == NULL) {
+    printf("Error: Key is NULL\n");
     return strdup("-ERR Key is Null\r\n");
   }
 
@@ -479,20 +491,27 @@ char *handleIncrement(char **args, int numArgs, bool isSlave) {
   const void *stored_value = getKeyValue(&store, key);
 
   if (stored_value != NULL) {
-    char *endptr;
-    currentValue = strtoll(stored_value, &endptr, 10);
+    currentValue = atoll((const char *)stored_value);
+    printf("Found existing value: %lld\n", currentValue);
+  } else {
+    printf("Key not found, starting with value: 0\n");
   }
 
   currentValue++;
+  printf("Incremented value: %lld\n", currentValue);
 
   char valueStr[32];
   snprintf(valueStr, sizeof(valueStr), "%lld", currentValue);
-  setKeyValue(&store, key, valueStr, strlen(valueStr) + 1);
+  printf("Converting to string: %s\n", valueStr);
 
-  char response[32];
-  snprintf(response, sizeof(response), ":%lld\r\n", currentValue);
+  setKeyValue(&store, key, valueStr, 0);
+  printf("Stored new value in database\n");
 
-  return strdup(response);
+  char *response = malloc(32);
+  snprintf(response, 32, ":%lld\r\n", currentValue);
+  printf("Prepared response: %s\n", response);
+
+  return response;
 }
 
 char *handleCommand(const char *command, char **args, int numArg,

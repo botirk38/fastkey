@@ -45,8 +45,4 @@ char *handleIncrement(char **args, int numArgs, bool isSlave);
 
 void ackReceived();
 
-extern Command commandTable[];
-extern KeyValueStore store;
-extern RDBConfig rdbConfig;
-
 #endif // COMMAND_HANDLER_H

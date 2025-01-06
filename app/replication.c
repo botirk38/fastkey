@@ -1,5 +1,4 @@
 #include "replication.h"
-#include "utils/utils.h"
 #include <arpa/inet.h> // for htons(), inet_pton()
 #include <pthread.h>
 #include <stdio.h>
@@ -203,7 +202,6 @@ bool handShakeSuccess(int sockfd, int port) {
     printf("Failed to skip RDB and full resync.\n");
     return false;
   }
-
 }
 
 void *skipRDBAndFullResync(void *sockfd_ptr) {
