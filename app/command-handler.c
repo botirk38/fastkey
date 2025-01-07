@@ -508,6 +508,13 @@ char *handleIncrement(char **args, int numArgs, bool isSlave) {
     return strdup(":1\r\n");
   }
 }
+char *handleMulti(char **args, int numArgs, bool isSlave) {
+  (void)args;    // Unused parameter
+  (void)numArgs; // Unused parameter
+  (void)isSlave; // Unused parameter
+
+  return strdup("+OK\r\n");
+}
 
 char *handleCommand(const char *command, char **args, int numArg,
                     bool isSlave) {
@@ -537,6 +544,8 @@ Command commandTable[] = {
     {"XRANGE", handleXrange},
     {"XREAD", handleXread},
     {"INCR", handleIncrement},
+    {"MULTI", handleMulti},
+
     {NULL, NULL} // End of the command table
                  //
 };
