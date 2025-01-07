@@ -1,20 +1,31 @@
 #ifndef EVENT_LOOP_H
 #define EVENT_LOOP_H
 
+#include "resp.h"
 #include "server.h"
+#include <stdlib.h>
 #include <sys/epoll.h>
 
 #define MAX_EVENTS 1024
+#define MAX_CLIENTS 1024
 
 typedef struct {
-  int epoll_fd;
+  int fd;
+  RespBuffer *buffer;
+} ClientState;
+
+typedef struct {
+  int epollFd;
   struct epoll_event *events;
   int running;
-} event_loop;
+  ClientState *clients[MAX_EVENTS];
+  size_t clientCount;
 
-event_loop *create_event_loop(void);
-void event_loop_add_fd(event_loop *loop, int fd, int events);
-void event_loop_remove_fd(event_loop *loop, int fd);
-void event_loop_start(event_loop *loop, redisServer *server);
+} EventLoop;
+
+EventLoop *createEventLoop(void);
+void eventLoopAddFd(EventLoop *loop, int fd, int events);
+void eventLoopRemoveFd(EventLoop *loop, int fd);
+void eventLoopStart(EventLoop *loop, RedisServer *server);
 
 #endif

@@ -4,8 +4,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-redisServer *createServer(void) {
-  redisServer *server = calloc(1, sizeof(redisServer));
+RedisServer *createServer(void) {
+  RedisServer *server = calloc(1, sizeof(RedisServer));
   if (!server)
     return NULL;
 
@@ -18,7 +18,7 @@ redisServer *createServer(void) {
   return server;
 }
 
-int initServer(redisServer *server) {
+int initServer(RedisServer *server) {
   // Initialize networking
   if (initServerSocket(server) != 0) {
     fprintf(stderr, "Failed to initialize server socket\n");
@@ -28,7 +28,7 @@ int initServer(redisServer *server) {
   return 0;
 }
 
-void freeServer(redisServer *server) {
+void freeServer(RedisServer *server) {
   if (server) {
     if (server->bindaddr) {
       free(server->bindaddr);
@@ -40,7 +40,7 @@ void freeServer(redisServer *server) {
   }
 }
 
-void serverCron(redisServer *server) {
+void serverCron(RedisServer *server) {
   // This will be used for periodic tasks like:
   // - Cleaning up expired keys
   // - Statistics gathering

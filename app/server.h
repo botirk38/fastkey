@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-typedef struct redisServer {
+typedef struct {
   int fd;            // Main server socket file descriptor
   uint16_t port;     // Server listening port
   char *bindaddr;    // Binding address
@@ -22,14 +22,14 @@ typedef struct redisServer {
   int repl_enabled;       // Replication enabled flag
   char *repl_master_host; // Master host for replication
   int repl_master_port;   // Master port for replication
-} redisServer;
+} RedisServer;
 
 // Server initialization and cleanup
-redisServer *createServer(void);
-void freeServer(redisServer *server);
+RedisServer *createServer(void);
+void freeServer(RedisServer *server);
 
 // Server operations
-int initServer(redisServer *server);
-void serverCron(redisServer *server);
+int initServer(RedisServer *server);
+void serverCron(RedisServer *server);
 
 #endif

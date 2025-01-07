@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-int initServerSocket(redisServer *server) {
+int initServerSocket(RedisServer *server) {
   int server_fd;
   struct sockaddr_in server_addr;
 
@@ -53,7 +53,7 @@ int initServerSocket(redisServer *server) {
   return 0;
 }
 
-int acceptClient(redisServer *server) {
+int acceptClient(RedisServer *server) {
   struct sockaddr_in client_addr;
   socklen_t client_len = sizeof(client_addr);
 
@@ -87,7 +87,7 @@ int acceptClient(redisServer *server) {
   return client_fd;
 }
 
-int sendReply(redisServer *server, int client_fd, char *reply) {
+int sendReply(RedisServer *server, int client_fd, char *reply) {
   size_t len = strlen(reply);
   ssize_t sent = send(client_fd, reply, len, 0);
 
@@ -105,7 +105,7 @@ int sendReply(redisServer *server, int client_fd, char *reply) {
   return 0;
 }
 
-void closeClientConnection(redisServer *server, int client_fd) {
+void closeClientConnection(RedisServer *server, int client_fd) {
   close(client_fd);
   server->clients_count--;
   printf("Client disconnected. Total clients: %d\n", server->clients_count);

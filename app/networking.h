@@ -12,12 +12,12 @@
 #define REGULAR_BUFFER_SIZE 1024
 
 // Networking setup
-int initServerSocket(redisServer *server);
-int acceptClient(redisServer *server);
-void closeClientConnection(redisServer *server, int client_fd);
+int initServerSocket(RedisServer *server);
+int acceptClient(RedisServer *server);
+void closeClientConnection(RedisServer *server, int client_fd);
 
 // Protocol handling
-int processInputBuffer(redisServer *server, int client_fd);
-int sendReply(redisServer *server, int client_fd, char *reply);
+int processInputBuffer(RedisServer *server, int client_fd);
+int sendReply(RedisServer *server, int client_fd, char *reply);
 
 #endif
