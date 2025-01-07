@@ -33,8 +33,15 @@ int main(void) {
       server->clients_count++;
     }
 
-    // Process client requests
-    // TODO: Implement event loop
+    // Read client input (we'll ignore it for now)
+    char buffer[REGULAR_BUFFER_SIZE];
+    read(client_fd, buffer, REGULAR_BUFFER_SIZE);
+
+    // Send PONG response in RESP format
+    const char *response = "+PONG\r\n";
+    if (sendReply(server, client_fd, (char *)response) < 0) {
+      fprintf(stderr, "Failed to send response\n");
+    }
 
     // Run periodic tasks
     serverCron(server);

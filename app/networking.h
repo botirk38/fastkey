@@ -8,6 +8,8 @@
 #include <sys/socket.h> // For socket operations
 #include <unistd.h>     // For close()
 
+#define REGULAR_BUFFER_SIZE 1024
+
 // Networking setup
 int initServerSocket(redisServer *server);
 int acceptClient(redisServer *server);
