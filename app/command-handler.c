@@ -527,6 +527,14 @@ char *handleCommand(const char *command, char **args, int numArg,
   return strdup("-ERROR Unknown command\r\n");
 }
 
+char *handleExec(char **args, int numArgs, bool isSlave) {
+  (void)args;    // Unused parameter
+  (void)numArgs; // Unused parameter
+  (void)isSlave; // Unused parameter
+
+  return strdup("-ERR EXEC without MULTI\r\n");
+}
+
 // Command table implementation
 Command commandTable[] = {
     {"PING", handlePing},
@@ -545,6 +553,7 @@ Command commandTable[] = {
     {"XREAD", handleXread},
     {"INCR", handleIncrement},
     {"MULTI", handleMulti},
+    {"EXEC", handleExec},
 
     {NULL, NULL} // End of the command table
                  //
