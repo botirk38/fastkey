@@ -472,46 +472,41 @@ char *handleXread(char **args, int numArg, bool isSlave) {
 }
 
 char *handleIncrement(char **args, int numArgs, bool isSlave) {
-  printf("Starting INCR command handling\n");
-
   if (numArgs < 1) {
-    printf("Error: Insufficient arguments for INCR\n");
     return strdup("-ERR Insufficient arguments for INCREMENT\r\n");
   }
 
   const char *key = args[0];
-  printf("Processing INCR for key: %s\n", key);
-
   if (key == NULL) {
-    printf("Error: Key is NULL\n");
     return strdup("-ERR Key is Null\r\n");
   }
 
-  long long currentValue = 0;
   const void *stored_value = getKeyValue(&store, key);
 
   if (stored_value != NULL) {
-    currentValue = atoll((const char *)stored_value);
-    printf("Found existing value: %lld\n", currentValue);
+    // Check if the stored value is a valid number
+    char *endptr;
+    const char *str_value = (const char *)stored_value;
+    long long currentValue = strtoll(str_value, &endptr, 10);
+
+    // If endptr points to anything other than '\0', the conversion failed
+    if (*endptr != '\0') {
+      return strdup("-ERR value is not an integer or out of range\r\n");
+    }
+
+    currentValue++;
+    char valueStr[32];
+    snprintf(valueStr, sizeof(valueStr), "%lld", currentValue);
+    setKeyValue(&store, key, valueStr, 0);
+
+    char *response = malloc(32);
+    snprintf(response, 32, ":%lld\r\n", currentValue);
+    return response;
   } else {
-    printf("Key not found, starting with value: 0\n");
+    // Key doesn't exist, start with 1
+    setKeyValue(&store, key, "1", 0);
+    return strdup(":1\r\n");
   }
-
-  currentValue++;
-  printf("Incremented value: %lld\n", currentValue);
-
-  char valueStr[32];
-  snprintf(valueStr, sizeof(valueStr), "%lld", currentValue);
-  printf("Converting to string: %s\n", valueStr);
-
-  setKeyValue(&store, key, valueStr, 0);
-  printf("Stored new value in database\n");
-
-  char *response = malloc(32);
-  snprintf(response, 32, ":%lld\r\n", currentValue);
-  printf("Prepared response: %s\n", response);
-
-  return response;
 }
 
 char *handleCommand(const char *command, char **args, int numArg,
