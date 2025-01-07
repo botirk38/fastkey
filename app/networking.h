@@ -2,7 +2,8 @@
 #define REDIS_NETWORKING_H
 
 #include "server.h"
-#include <arpa/inet.h>  // For inet_pton
+#include <arpa/inet.h> // For inet_pton
+#include <errno.h>
 #include <fcntl.h>      // For fcntl(), F_GETFL, F_SETFL
 #include <netinet/in.h> // For sockaddr_in
 #include <sys/socket.h> // For socket operations
