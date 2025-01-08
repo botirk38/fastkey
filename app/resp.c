@@ -1,4 +1,3 @@
-
 #define _GNU_SOURCE
 #include "resp.h"
 #include <stdio.h>
@@ -6,12 +5,10 @@
 #include <string.h>
 
 RespBuffer *createRespBuffer() {
-
   RespBuffer *respBuffer = malloc(sizeof(RespBuffer));
   respBuffer->buffer = malloc(RESP_BUFFER_SIZE);
   respBuffer->size = RESP_BUFFER_SIZE;
   respBuffer->used = 0;
-
   return respBuffer;
 }
 
@@ -21,7 +18,7 @@ void freeRespBuffer(RespBuffer *buffer) {
 }
 
 int appendRespBuffer(RespBuffer *buffer, const char *data, size_t len) {
-
+  /* Resize buffer if needed */
   if (buffer->used + len > buffer->size) {
     size_t newSize = buffer->size * 2;
     while (newSize < buffer->used + len) {
@@ -38,6 +35,11 @@ int appendRespBuffer(RespBuffer *buffer, const char *data, size_t len) {
   buffer->used += len;
   return RESP_OK;
 }
+
+/**
+ * Helper function to parse a line ending in CRLF
+ * @return RESP_OK on success, RESP_INCOMPLETE if no CRLF found
+ */
 static int parseLine(const char *data, size_t len, size_t *lineLen,
                      char **line) {
   char *crlf = memmem(data, len, "\r\n", 2);
@@ -51,6 +53,9 @@ static int parseLine(const char *data, size_t len, size_t *lineLen,
   return RESP_OK;
 }
 
+/**
+ * Creates a new RESP string value
+ */
 static RespValue *createRespString(const char *str, size_t len) {
   RespValue *value = malloc(sizeof(RespValue));
   value->type = RespTypeString;
@@ -61,6 +66,10 @@ static RespValue *createRespString(const char *str, size_t len) {
   return value;
 }
 
+/**
+ * Parses a RESP bulk string
+ * Format: $<length>\r\n<data>\r\n
+ */
 static int parseBulkString(const char *data, size_t len, RespValue **value,
                            size_t *consumed) {
   char *line;
@@ -70,22 +79,25 @@ static int parseBulkString(const char *data, size_t len, RespValue **value,
     return RESP_INCOMPLETE;
   }
 
-  int strLen = atoi(line + 1);
+  int strLen = atoi(line + 1); /* Skip '$' */
   free(line);
 
-  *consumed = lineLen + 2;
+  *consumed = lineLen + 2; /* Include CRLF */
   if (strLen < 0)
     return RESP_ERR;
-
   if (len < *consumed + strLen + 2)
     return RESP_INCOMPLETE;
 
   *value = createRespString(data + *consumed, strLen);
-  *consumed += strLen + 2;
+  *consumed += strLen + 2; /* Include final CRLF */
 
   return RESP_OK;
 }
 
+/**
+ * Parses a RESP array
+ * Format: *<length>\r\n<element-1>...<element-n>
+ */
 static int parseArray(const char *data, size_t len, RespValue **value,
                       size_t *consumed) {
   char *line;
@@ -95,10 +107,10 @@ static int parseArray(const char *data, size_t len, RespValue **value,
     return RESP_INCOMPLETE;
   }
 
-  int arrayLen = atoi(line + 1);
+  int arrayLen = atoi(line + 1); /* Skip '*' */
   free(line);
 
-  *consumed = lineLen + 2;
+  *consumed = lineLen + 2; /* Include CRLF */
   if (arrayLen < 0)
     return RESP_ERR;
 
@@ -160,6 +172,7 @@ void freeRespValue(RespValue *value) {
   switch (value->type) {
   case RespTypeString:
   case RespTypeBulk:
+  case RespTypeError:
     free(value->data.string.str);
     break;
   case RespTypeArray:
@@ -168,13 +181,8 @@ void freeRespValue(RespValue *value) {
     }
     free(value->data.array.elements);
     break;
-
-  case RespTypeError:
-    free(value->data.string.str);
-    break;
   case RespTypeInteger:
-    // Integers don't need freeing
-    break;
+    break; /* Nothing to free for integers */
   }
   free(value);
 }
@@ -184,11 +192,12 @@ char *encodeBulkString(const char *str, size_t len, size_t *outputLen) {
   int headerLen = snprintf(header, sizeof(header), "$%zu\r\n", len);
 
   *outputLen = headerLen + len + 2;
-  char *output = malloc(*outputLen);
+  char *output = malloc(*outputLen + 1); // Add space for null terminator
 
   memcpy(output, header, headerLen);
   memcpy(output + headerLen, str, len);
   memcpy(output + headerLen + len, "\r\n", 2);
+  output[*outputLen] = '\0'; // Null terminate the string
 
   return output;
 }

@@ -1,4 +1,5 @@
 #include "client_handler.h"
+#include "command.h"
 #include "networking.h"
 #include <stdlib.h>
 #include <string.h>
@@ -25,18 +26,9 @@ void handleClientCommand(RedisServer *server, int fd, RespValue *command) {
     return;
   }
 
-  RespValue *cmdName = command->data.array.elements[0];
-  if (strcasecmp(cmdName->data.string.str, "PING") == 0) {
-    sendReply(server, fd, "+PONG\r\n");
-  } else if (strcasecmp(cmdName->data.string.str, "ECHO") == 0 &&
-             command->data.array.len == 2) {
-    RespValue *arg = command->data.array.elements[1];
-    size_t responseLen;
-    char *response = encodeBulkString(arg->data.string.str,
-                                      arg->data.string.len, &responseLen);
-    sendReply(server, fd, response);
-    free(response);
-  }
+  const char *response = executeCommand(server->db, command);
+
+  sendReply(server, fd, response);
 }
 
 void handleClientData(EventLoop *loop, RedisServer *server, int fd) {

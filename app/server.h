@@ -1,35 +1,58 @@
-#ifndef REDIS_SERVER_H
-#define REDIS_SERVER_H
+#ifndef SERVER_H
+#define SERVER_H
 
-#include <stdint.h>
+#include "command.h"
+#include "redis_store.h"
 
-typedef struct {
+typedef struct RedisServer {
+  // Networking
   int fd;            // Main server socket file descriptor
-  uint16_t port;     // Server listening port
   char *bindaddr;    // Binding address
-  int clients_count; // Connected clients count
+  int port;          // TCP listening port
+  int tcp_backlog;   // TCP listen() backlog
+  int clients_count; // Connected clients counter
 
-  // Configuration
-  int tcp_backlog; // TCP listen backlog
+  // Data Storage
+  RedisStore *db; // Main key-value storage
+  CommandTable *commands;
 
-  // Database
-  struct redisDb *db; // Redis database
-
-  // Persistence
-  char *rdb_filename; // RDB file name
-
-  // Replication
-  int repl_enabled;       // Replication enabled flag
-  char *repl_master_host; // Master host for replication
-  int repl_master_port;   // Master port for replication
+  // Server Statistics
+  long long total_commands_processed;
+  long long keyspace_hits;
+  long long keyspace_misses;
 } RedisServer;
 
-// Server initialization and cleanup
+/**
+ * Creates a new Redis server instance with default configuration.
+ *
+ * @return Pointer to new RedisServer instance, or NULL on failure
+ */
 RedisServer *createServer(void);
+
+/**
+ * Initializes server components including networking and storage.
+ *
+ * @param server Pointer to RedisServer instance
+ * @return 0 on success, non-zero on failure
+ */
+int initServer(RedisServer *server);
+
+/**
+ * Cleans up and frees all server resources.
+ *
+ * @param server Pointer to RedisServer instance
+ */
 void freeServer(RedisServer *server);
 
-// Server operations
-int initServer(RedisServer *server);
+/**
+ * Periodic server tasks handler.
+ * Handles tasks like:
+ * - Expired keys cleanup
+ * - Statistics updates
+ * - Health checks
+ *
+ * @param server Pointer to RedisServer instance
+ */
 void serverCron(RedisServer *server);
 
 #endif

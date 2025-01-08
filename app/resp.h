@@ -3,46 +3,94 @@
 
 #include <stddef.h>
 
-#define RESP_OK 0
-#define RESP_ERR -1
-#define RESP_INCOMPLETE 1
+/* Response status codes */
+#define RESP_OK 0             /* Operation completed successfully */
+#define RESP_ERR -1           /* Operation failed */
+#define RESP_INCOMPLETE 1     /* More data needed to complete parsing */
+#define RESP_BUFFER_SIZE 4096 /* Initial buffer size for RESP parsing */
 
-#define RESP_BUFFER_SIZE 4096
-
+/**
+ * RESP protocol value types
+ */
 typedef enum {
-  RespTypeString,
-  RespTypeError,
-  RespTypeInteger,
-  RespTypeBulk,
-  RespTypeArray
+  RespTypeString,  /* Simple string response (+) */
+  RespTypeError,   /* Error response (-) */
+  RespTypeInteger, /* Integer response (:) */
+  RespTypeBulk,    /* Bulk string response ($) */
+  RespTypeArray    /* Array response (*) */
 } RespType;
 
+/**
+ * Represents a RESP protocol value
+ */
 typedef struct RespValue {
   RespType type;
   union {
     struct {
-      char *str;
-      size_t len;
+      char *str;  /* String data */
+      size_t len; /* String length */
     } string;
-    long long integer;
+    long long integer; /* Integer value */
     struct {
-      struct RespValue **elements;
-      size_t len;
+      struct RespValue **elements; /* Array elements */
+      size_t len;                  /* Array length */
     } array;
   } data;
 } RespValue;
 
+/**
+ * Buffer for accumulating and parsing RESP data
+ */
 typedef struct RespBuffer {
-  char *buffer;
-  size_t size;
-  size_t used;
+  char *buffer; /* Raw data buffer */
+  size_t size;  /* Total buffer size */
+  size_t used;  /* Amount of buffer currently used */
 } RespBuffer;
 
+/**
+ * Creates a new RESP buffer
+ * @return Newly allocated RespBuffer or NULL on failure
+ */
 RespBuffer *createRespBuffer(void);
+
+/**
+ * Frees a RESP buffer and its contents
+ * @param buffer Buffer to free
+ */
 void freeRespBuffer(RespBuffer *buffer);
+
+/**
+ * Appends data to a RESP buffer
+ * @param buffer Buffer to append to
+ * @param data Data to append
+ * @param len Length of data
+ * @return RESP_OK on success, RESP_ERR on failure
+ */
 int appendRespBuffer(RespBuffer *buffer, const char *data, size_t len);
+
+/**
+ * Parses RESP protocol data from buffer
+ * @param buffer Buffer containing RESP data
+ * @param value Pointer to store parsed value
+ * @return RESP_OK on success, RESP_ERR on failure, RESP_INCOMPLETE if more data
+ * needed
+ */
 int parseResp(RespBuffer *buffer, RespValue **value);
+
+/**
+ * Frees a RESP value and all its contents
+ * @param value Value to free
+ */
 void freeRespValue(RespValue *value);
+
+/**
+ * Encodes a string as a RESP bulk string
+ * @param str String to encode
+ * @param len Length of string
+ * @param outputLen Pointer to store output length
+ * @return Newly allocated string containing RESP bulk string
+ */
 char *encodeBulkString(const char *str, size_t len, size_t *outputLen);
 
 #endif
+

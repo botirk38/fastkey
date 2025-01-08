@@ -1,4 +1,5 @@
 #include "server.h"
+#include "command.h"
 #include "networking.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,11 +10,23 @@ RedisServer *createServer(void) {
   if (!server)
     return NULL;
 
-  // Set default values
+  // Network defaults
   server->port = 6379;
   server->bindaddr = strdup("127.0.0.1");
   server->tcp_backlog = 511;
   server->clients_count = 0;
+
+  // Initialize storage
+  server->db = createStore();
+  if (!server->db) {
+    freeServer(server);
+    return NULL;
+  }
+
+  // Initialize statistics
+  server->total_commands_processed = 0;
+  server->keyspace_hits = 0;
+  server->keyspace_misses = 0;
 
   return server;
 }
@@ -29,21 +42,34 @@ int initServer(RedisServer *server) {
 }
 
 void freeServer(RedisServer *server) {
-  if (server) {
-    if (server->bindaddr) {
-      free(server->bindaddr);
-    }
-    if (server->fd > 0) {
-      close(server->fd);
-    }
-    free(server);
+  if (!server)
+    return;
+
+  if (server->bindaddr) {
+    free(server->bindaddr);
   }
+
+  if (server->fd > 0) {
+    close(server->fd);
+  }
+
+  if (server->db) {
+    freeStore(server->db);
+  }
+
+  if (server->commands) {
+    freeCommandTable(server->commands);
+  }
+
+  free(server);
 }
 
 void serverCron(RedisServer *server) {
-  // This will be used for periodic tasks like:
-  // - Cleaning up expired keys
-  // - Statistics gathering
-  // - Replication health checks
-  // For now, it's just a placeholder
+  // Clean up expired keys
+  clearExpired(server->db);
+
+  // Future implementations:
+  // - Update statistics
+  // - Check replication status
+  // - Memory usage monitoring
 }

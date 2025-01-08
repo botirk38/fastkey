@@ -87,7 +87,8 @@ int acceptClient(RedisServer *server) {
   return client_fd;
 }
 
-int sendReply(RedisServer *server, int client_fd, char *reply) {
+int sendReply(const RedisServer *server, const int client_fd,
+              const char *reply) {
   size_t len = strlen(reply);
   ssize_t sent = send(client_fd, reply, len, 0);
 
