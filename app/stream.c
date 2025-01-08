@@ -61,7 +61,7 @@ uint64_t getNextSequence(Stream *stream, uint64_t ms) {
 }
 
 char *generateStreamID(uint64_t ms, uint64_t seq) {
-  char *id = malloc(32); // Enough space for any uint64_t pair
+  char *id = malloc(16); // Enough space for any uint64_t pair
   snprintf(id, 32, "%llu-%llu", ms, seq);
   return id;
 }
