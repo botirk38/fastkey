@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+static const bool parseStreamId(const char *id, StreamID *parsed);
+
 Stream *createStream(void) {
   Stream *stream = malloc(sizeof(Stream));
   stream->head = NULL;
@@ -11,6 +13,21 @@ Stream *createStream(void) {
 
 char *streamAdd(Stream *stream, const char *id, char **fields, char **values,
                 size_t numFields) {
+
+  StreamID parsedId;
+  if (!parseStreamId(id, &parsedId)) {
+    return NULL;
+  }
+
+  if (!isValidNextID(stream, &parsedId)) {
+    if (parsedId.ms == 0 && parsedId.seq == 0) {
+      return strdup(
+          "-ERR The ID specified in XADD must be greater than 0-0\r\n");
+    }
+    return strdup("-ERR The ID specified in XADD is equal or smaller than the "
+                  "target stream top item\r\n");
+  }
+
   StreamEntry *entry = malloc(sizeof(StreamEntry));
   entry->id = strdup(id);
   entry->numFields = numFields;
@@ -48,4 +65,47 @@ void freeStream(Stream *stream) {
     current = next;
   }
   free(stream);
+}
+
+static const bool parseStreamId(const char *id, StreamID *parsed) {
+
+  const char *dash = strchr(id, '-');
+
+  if (!dash) {
+    return false;
+  }
+
+  char *endMs;
+  char *endSeq;
+  parsed->ms = strtoull(id, &endMs, 10);
+  parsed->seq = strtoull(dash + 1, &endSeq, 10);
+
+  return endMs == dash && *endSeq == '\0';
+}
+
+bool isValidNextID(Stream *stream, const StreamID *newId) {
+  // Check minimum valid ID
+  if (newId->ms == 0 && newId->seq == 0) {
+    return false;
+  }
+
+  // Empty stream - any valid ID is acceptable
+  if (!stream->tail) {
+    return true;
+  }
+
+  StreamID lastId;
+  if (!parseStreamId(stream->tail->id, &lastId)) {
+    return false;
+  }
+
+  // New ID must be greater
+  if (newId->ms < lastId.ms) {
+    return false;
+  }
+  if (newId->ms == lastId.ms && newId->seq <= lastId.seq) {
+    return false;
+  }
+
+  return true;
 }

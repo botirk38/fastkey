@@ -87,16 +87,23 @@ static const char *handleXadd(RedisStore *store, RespValue *command) {
     values[i] = command->data.array.elements[4 + i * 2]->data.string.str;
   }
 
-  char *resultId =
-      storeStreamAdd(store, key->data.string.str, id->data.string.str, fields,
-                     values, numFields);
+  char *result = storeStreamAdd(store, key->data.string.str,
+                                id->data.string.str, fields, values, numFields);
 
   free(fields);
   free(values);
 
+  // If result starts with "-ERR", it's an error message
+  if (result[0] == '-') {
+    char *response = strdup(result);
+    free(result);
+    return response;
+  }
+
+  // Otherwise, it's a successful ID that needs to be encoded as bulk string
   size_t responseLen;
-  char *response = encodeBulkString(resultId, strlen(resultId), &responseLen);
-  free(resultId);
+  char *response = encodeBulkString(result, strlen(result), &responseLen);
+  free(result);
   return response;
 }
 
