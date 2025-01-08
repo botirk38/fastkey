@@ -201,3 +201,30 @@ char *encodeBulkString(const char *str, size_t len, size_t *outputLen) {
 
   return output;
 }
+
+char *createSimpleString(const char *str) {
+  size_t len = strlen(str);
+  char *response = malloc(len + 4); // +3 for "+\r\n" and +1 for null terminator
+  snprintf(response, len + 4, "+%s\r\n", str);
+  return response;
+}
+
+char *createError(const char *message) {
+  size_t len = strlen(message);
+  char *response = malloc(len + 4); // +3 for "-\r\n" and +1 for null terminator
+  snprintf(response, len + 4, "-%s\r\n", message);
+  return response;
+}
+
+char *createInteger(long long num) {
+  char *response = malloc(32); // Enough for any 64-bit integer
+  snprintf(response, 32, ":%lld\r\n", num);
+  return response;
+}
+
+char *createBulkString(const char *str, size_t len) {
+  size_t outputLen;
+  return encodeBulkString(str, len, &outputLen);
+}
+
+char *createNullBulkString(void) { return strdup("$-1\r\n"); }

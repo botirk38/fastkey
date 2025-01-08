@@ -11,41 +11,38 @@ static const char *handleSet(RedisStore *store, RespValue *command) {
            value->data.string.len);
 
   if (command->data.array.len < 5) {
-    return strdup("+OK\r\n");
+    return createSimpleString("OK");
   }
 
   RespValue *option = command->data.array.elements[3];
   if (strcasecmp(option->data.string.str, "px") != 0) {
-    return strdup("+OK\r\n");
+    return createSimpleString("OK");
   }
 
   RespValue *pxValue = command->data.array.elements[4];
   long long milliseconds = atoll(pxValue->data.string.str);
   if (milliseconds <= 0) {
-    return strdup("+OK\r\n");
+    return createSimpleString("OK");
   }
 
   time_t expiry = getCurrentTimeMs() + milliseconds;
   setExpiry(store, key->data.string.str, expiry);
 
-  return strdup("+OK\r\n");
+  return createSimpleString("OK");
 }
 
 static const char *handleType(RedisStore *store, RespValue *command) {
   RespValue *key = command->data.array.elements[1];
-
   ValueType type = getValueType(store, key->data.string.str);
 
   switch (type) {
   case TYPE_STRING:
-    return strdup("+string\r\n");
-
+    return createSimpleString("string");
   case TYPE_STREAM:
-    return strdup("+stream\r\n");
+    return createSimpleString("stream");
   case TYPE_NONE:
-    return strdup("+none\r\n");
   default:
-    return strdup("+none\r\n");
+    return createSimpleString("none");
   }
 }
 
@@ -55,23 +52,20 @@ static const char *handleGet(RedisStore *store, RespValue *command) {
   void *value = storeGet(store, key->data.string.str, &valueLen);
 
   if (value) {
-    size_t responseLen;
-    char *response = encodeBulkString(value, valueLen, &responseLen);
+    char *response = createBulkString(value, valueLen);
     free(value);
     return response;
   }
-  return strdup("$-1\r\n");
+  return createNullBulkString();
 }
 
 static const char *handleEcho(RedisStore *store, RespValue *command) {
   RespValue *message = command->data.array.elements[1];
-  size_t responseLen;
-  return encodeBulkString(message->data.string.str, message->data.string.len,
-                          &responseLen);
+  return createBulkString(message->data.string.str, message->data.string.len);
 }
 
 static const char *handlePing(RedisStore *store, RespValue *command) {
-  return strdup("+PONG\r\n");
+  return createSimpleString("PONG");
 }
 
 static const char *handleXadd(RedisStore *store, RespValue *command) {
@@ -93,34 +87,28 @@ static const char *handleXadd(RedisStore *store, RespValue *command) {
   free(fields);
   free(values);
 
-  // If result starts with "-ERR", it's an error message
   if (result[0] == '-') {
-    char *response = strdup(result);
+    char *response = createError(result + 1); // Skip "-"
     free(result);
     return response;
   }
 
-  // Otherwise, it's a successful ID that needs to be encoded as bulk string
-  size_t responseLen;
-  char *response = encodeBulkString(result, strlen(result), &responseLen);
+  char *response = createBulkString(result, strlen(result));
   free(result);
   return response;
 }
 
-static CommandHandler baseCommands[] = {{"SET", handleSet, 3, 5},
-                                        {"GET", handleGet, 2, 2},
-                                        {"PING", handlePing, 1, 1},
-                                        {"ECHO", handleEcho, 2, 2},
-                                        {"TYPE", handleType, 2, 2},
-                                        {"XADD", handleXadd, 4, -1}
+static CommandHandler baseCommands[] = {
+    {"SET", handleSet, 3, 5},   {"GET", handleGet, 2, 2},
+    {"PING", handlePing, 1, 1}, {"ECHO", handleEcho, 2, 2},
+    {"TYPE", handleType, 2, 2}, {"XADD", handleXadd, 4, -1}};
 
-};
 static const size_t commandCount =
     sizeof(baseCommands) / sizeof(CommandHandler);
 
 const char *executeCommand(RedisStore *store, RespValue *command) {
   if (command->type != RespTypeArray || command->data.array.len < 1) {
-    return strdup("-ERR wrong number of arguments\r\n");
+    return createError("wrong number of arguments");
   }
 
   RespValue *cmdName = command->data.array.elements[0];
@@ -131,25 +119,12 @@ const char *executeCommand(RedisStore *store, RespValue *command) {
       if (command->data.array.len < handler->minArgs ||
           (handler->maxArgs != -1 &&
            command->data.array.len > handler->maxArgs)) {
-        return strdup("-ERR wrong number of arguments\r\n");
+        return createError("wrong number of arguments");
       }
       return handler->handler(store, command);
     }
   }
 
-  return strdup("-ERR unknown command\r\n");
+  return createError("unknown command");
 }
 
-CommandTable *createCommandTable(void) {
-  CommandTable *table = malloc(sizeof(CommandTable));
-  size_t commandsSize = sizeof(baseCommands);
-  table->commands = malloc(commandsSize);
-  memcpy(table->commands, baseCommands, commandsSize);
-  table->count = sizeof(baseCommands) / sizeof(CommandHandler);
-  return table;
-}
-
-void freeCommandTable(CommandTable *table) {
-  free(table->commands);
-  free(table);
-}

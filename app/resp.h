@@ -92,5 +92,10 @@ void freeRespValue(RespValue *value);
  */
 char *encodeBulkString(const char *str, size_t len, size_t *outputLen);
 
-#endif
+char *createSimpleString(const char *str);
+char *createError(const char *message);
+char *createInteger(long long num);
+char *createBulkString(const char *str, size_t len);
+char *createNullBulkString(void);
 
+#endif

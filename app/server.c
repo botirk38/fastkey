@@ -1,5 +1,4 @@
 #include "server.h"
-#include "command.h"
 #include "networking.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -55,10 +54,6 @@ void freeServer(RedisServer *server) {
 
   if (server->db) {
     freeStore(server->db);
-  }
-
-  if (server->commands) {
-    freeCommandTable(server->commands);
   }
 
   free(server);
