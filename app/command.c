@@ -8,6 +8,25 @@ static const char *handleSet(RedisStore *store, RespValue *command) {
 
   storeSet(store, key->data.string.str, value->data.string.str,
            value->data.string.len);
+
+  if (command->data.array.len < 5) {
+    return strdup("+OK\r\n");
+  }
+
+  RespValue *option = command->data.array.elements[3];
+  if (strcasecmp(option->data.string.str, "px") != 0) {
+    return strdup("+OK\r\n");
+  }
+
+  RespValue *pxValue = command->data.array.elements[4];
+  long long milliseconds = atoll(pxValue->data.string.str);
+  if (milliseconds <= 0) {
+    return strdup("+OK\r\n");
+  }
+
+  time_t expiry = getCurrentTimeMs() + milliseconds;
+  setExpiry(store, key->data.string.str, expiry);
+
   return strdup("+OK\r\n");
 }
 
@@ -59,7 +78,7 @@ const char *executeCommand(RedisStore *store, RespValue *command) {
     return strdup("-ERR wrong number of arguments\r\n");
   }
 
-  static CommandHandler baseCommands[] = {{"SET", handleSet, 3, 3},
+  static CommandHandler baseCommands[] = {{"SET", handleSet, 3, 5},
                                           {"GET", handleGet, 2, 2},
                                           {"PING", handlePing, 1, 1},
                                           {"ECHO", handleEcho, 2, 2}};

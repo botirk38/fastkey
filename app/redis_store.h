@@ -34,6 +34,7 @@ int storeDelete(RedisStore *store, const char *key);
 int setExpiry(RedisStore *store, const char *key, time_t expiry);
 int getExpiry(RedisStore *store, const char *key, time_t *expiry);
 void clearExpired(RedisStore *store);
+time_t getCurrentTimeMs(void);
 
 // Utility functions
 size_t storeSize(RedisStore *store);

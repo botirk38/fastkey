@@ -88,7 +88,7 @@ void *storeGet(RedisStore *store, const char *key, size_t *valueLen) {
 
   while (entry) {
     if (strcmp(entry->key, key) == 0) {
-      if (entry->expiry && entry->expiry < time(NULL)) {
+      if (entry->expiry && entry->expiry <= getCurrentTimeMs()) {
         return NULL;
       }
 
@@ -135,6 +135,12 @@ void clearExpired(RedisStore *store) {
       }
     }
   }
+}
+
+time_t getCurrentTimeMs(void) {
+  struct timespec ts;
+  clock_gettime(CLOCK_REALTIME, &ts);
+  return ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 }
 
 void freeStore(RedisStore *store) {
