@@ -32,5 +32,8 @@ char *streamAdd(Stream *stream, const char *id, char **fields, char **values,
 
 bool validateStreamID(const char *id, StreamID *parsed);
 bool isValidNextID(Stream *stream, const StreamID *newId);
+bool parseStreamID(const char *id, StreamID *parsed);
+uint64_t getNextSequence(Stream *stream, uint64_t ms);
+char *generateStreamID(uint64_t ms, uint64_t seq);
 
 #endif

@@ -1,24 +1,84 @@
 #include "stream.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-static const bool parseStreamId(const char *id, StreamID *parsed);
+bool isValidNextID(Stream *stream, const StreamID *newId) {
+  if (newId->ms == 0 && newId->seq == 0) {
+    return false;
+  }
 
-Stream *createStream(void) {
-  Stream *stream = malloc(sizeof(Stream));
-  stream->head = NULL;
-  stream->tail = NULL;
-  return stream;
+  if (!stream->tail) {
+    return true;
+  }
+
+  StreamID lastId;
+  if (!parseStreamID(stream->tail->id, &lastId)) {
+    return false;
+  }
+
+  if (newId->ms < lastId.ms) {
+    return false;
+  }
+  if (newId->ms == lastId.ms && newId->seq <= lastId.seq) {
+    return false;
+  }
+
+  return true;
+}
+
+bool parseStreamID(const char *id, StreamID *parsed) {
+  char *dash = strchr(id, '-');
+  if (!dash) {
+    return false;
+  }
+
+  parsed->ms = strtoull(id, NULL, 10);
+
+  // Handle auto-sequence case
+  if (*(dash + 1) == '*') {
+    parsed->seq = UINT64_MAX; // Special marker for auto-sequence
+    return true;
+  }
+
+  parsed->seq = strtoull(dash + 1, NULL, 10);
+  return true;
+}
+
+uint64_t getNextSequence(Stream *stream, uint64_t ms) {
+  if (!stream->tail) {
+    return (ms == 0) ? 1 : 0;
+  }
+
+  StreamID lastId;
+  parseStreamID(stream->tail->id, &lastId);
+
+  if (lastId.ms == ms) {
+    return lastId.seq + 1;
+  }
+
+  return 0;
+}
+
+char *generateStreamID(uint64_t ms, uint64_t seq) {
+  char *id = malloc(32); // Enough space for any uint64_t pair
+  snprintf(id, 32, "%llu-%llu", ms, seq);
+  return id;
 }
 
 char *streamAdd(Stream *stream, const char *id, char **fields, char **values,
                 size_t numFields) {
-
   StreamID parsedId;
-  if (!parseStreamId(id, &parsedId)) {
+  if (!parseStreamID(id, &parsedId)) {
     return NULL;
   }
 
+  // Handle auto-sequence
+  if (parsedId.seq == UINT64_MAX) {
+    parsedId.seq = getNextSequence(stream, parsedId.ms);
+  }
+
+  // Validate ID (keeping existing validation)
   if (!isValidNextID(stream, &parsedId)) {
     if (parsedId.ms == 0 && parsedId.seq == 0) {
       return strdup(
@@ -28,8 +88,10 @@ char *streamAdd(Stream *stream, const char *id, char **fields, char **values,
                   "target stream top item\r\n");
   }
 
+  // Create new entry with generated ID
+  char *finalId = generateStreamID(parsedId.ms, parsedId.seq);
   StreamEntry *entry = malloc(sizeof(StreamEntry));
-  entry->id = strdup(id);
+  entry->id = finalId;
   entry->numFields = numFields;
   entry->fields = malloc(numFields * sizeof(char *));
   entry->values = malloc(numFields * sizeof(char *));
@@ -47,7 +109,7 @@ char *streamAdd(Stream *stream, const char *id, char **fields, char **values,
   }
   stream->tail = entry;
 
-  return strdup(id);
+  return strdup(finalId);
 }
 
 void freeStream(Stream *stream) {
@@ -67,45 +129,9 @@ void freeStream(Stream *stream) {
   free(stream);
 }
 
-static const bool parseStreamId(const char *id, StreamID *parsed) {
-
-  const char *dash = strchr(id, '-');
-
-  if (!dash) {
-    return false;
-  }
-
-  char *endMs;
-  char *endSeq;
-  parsed->ms = strtoull(id, &endMs, 10);
-  parsed->seq = strtoull(dash + 1, &endSeq, 10);
-
-  return endMs == dash && *endSeq == '\0';
-}
-
-bool isValidNextID(Stream *stream, const StreamID *newId) {
-  // Check minimum valid ID
-  if (newId->ms == 0 && newId->seq == 0) {
-    return false;
-  }
-
-  // Empty stream - any valid ID is acceptable
-  if (!stream->tail) {
-    return true;
-  }
-
-  StreamID lastId;
-  if (!parseStreamId(stream->tail->id, &lastId)) {
-    return false;
-  }
-
-  // New ID must be greater
-  if (newId->ms < lastId.ms) {
-    return false;
-  }
-  if (newId->ms == lastId.ms && newId->seq <= lastId.seq) {
-    return false;
-  }
-
-  return true;
+Stream *createStream(void) {
+  Stream *stream = malloc(sizeof(Stream));
+  stream->head = NULL;
+  stream->tail = NULL;
+  return stream;
 }
