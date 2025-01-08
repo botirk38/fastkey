@@ -1,4 +1,5 @@
 #include "redis_store.h"
+#include "stream.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -23,7 +24,11 @@ RedisStore *createStore(void) {
 
 static void freeEntry(StoreEntry *entry) {
   free(entry->key);
-  free(entry->value);
+  if (entry->type == TYPE_STRING) {
+    free(entry->value.string.data);
+  } else if (entry->type == TYPE_STREAM) {
+    freeStream(entry->value.stream);
+  }
   free(entry);
 }
 
@@ -48,7 +53,6 @@ static void resize(RedisStore *store) {
 }
 
 int storeSet(RedisStore *store, const char *key, void *value, size_t valueLen) {
-
   if ((float)store->used / store->size > LOAD_FACTOR_THRESHOLD) {
     resize(store);
   }
@@ -58,10 +62,15 @@ int storeSet(RedisStore *store, const char *key, void *value, size_t valueLen) {
 
   while (entry) {
     if (strcmp(entry->key, key) == 0) {
-      free(entry->value);
-      entry->value = malloc(valueLen);
-      memcpy(entry->value, value, valueLen);
-      entry->valueLen = valueLen;
+      if (entry->type == TYPE_STRING) {
+        free(entry->value.string.data);
+      } else if (entry->type == TYPE_STREAM) {
+        freeStream(entry->value.stream);
+      }
+      entry->type = TYPE_STRING;
+      entry->value.string.data = malloc(valueLen);
+      memcpy(entry->value.string.data, value, valueLen);
+      entry->value.string.len = valueLen;
       return STORE_OK;
     }
     entry = entry->next;
@@ -69,11 +78,11 @@ int storeSet(RedisStore *store, const char *key, void *value, size_t valueLen) {
 
   entry = malloc(sizeof(StoreEntry));
   entry->key = strdup(key);
-  entry->value = malloc(valueLen);
-  memcpy(entry->value, value, valueLen);
-  entry->valueLen = valueLen;
+  entry->type = TYPE_STRING;
+  entry->value.string.data = malloc(valueLen);
+  memcpy(entry->value.string.data, value, valueLen);
+  entry->value.string.len = valueLen;
   entry->expiry = 0;
-
   entry->next = store->table[hashVal];
   store->table[hashVal] = entry;
   store->used++;
@@ -82,7 +91,6 @@ int storeSet(RedisStore *store, const char *key, void *value, size_t valueLen) {
 }
 
 void *storeGet(RedisStore *store, const char *key, size_t *valueLen) {
-
   uint64_t hashVal = hash(key) % store->size;
   StoreEntry *entry = store->table[hashVal];
 
@@ -91,21 +99,21 @@ void *storeGet(RedisStore *store, const char *key, size_t *valueLen) {
       if (entry->expiry && entry->expiry <= getCurrentTimeMs()) {
         return NULL;
       }
-
-      void *value = malloc(entry->valueLen);
-      memcpy(value, entry->value, entry->valueLen);
-      *valueLen = entry->valueLen;
+      if (entry->type != TYPE_STRING) {
+        return NULL;
+      }
+      void *value = malloc(entry->value.string.len);
+      memcpy(value, entry->value.string.data, entry->value.string.len);
+      *valueLen = entry->value.string.len;
       return value;
     }
     entry = entry->next;
   }
-
   return NULL;
 }
 
 ValueType getValueType(RedisStore *store, const char *key) {
   uint64_t hashVal = hash(key) % store->size;
-
   StoreEntry *entry = store->table[hashVal];
 
   while (entry) {
@@ -113,16 +121,14 @@ ValueType getValueType(RedisStore *store, const char *key) {
       if (entry->expiry && entry->expiry < time(NULL)) {
         return TYPE_NONE;
       }
-      return TYPE_STRING;
+      return entry->type;
     }
     entry = entry->next;
   }
-
   return TYPE_NONE;
 }
 
 int setExpiry(RedisStore *store, const char *key, time_t expiry) {
-
   uint64_t hashVal = hash(key) % store->size;
   StoreEntry *entry = store->table[hashVal];
 
@@ -133,13 +139,11 @@ int setExpiry(RedisStore *store, const char *key, time_t expiry) {
     }
     entry = entry->next;
   }
-
   return STORE_ERR;
 }
 
 void clearExpired(RedisStore *store) {
   time_t now = time(NULL);
-
   for (size_t i = 0; i < store->size; i++) {
     StoreEntry **entryPtr = &store->table[i];
     while (*entryPtr) {
@@ -153,6 +157,31 @@ void clearExpired(RedisStore *store) {
       }
     }
   }
+}
+
+char *storeStreamAdd(RedisStore *store, const char *key, const char *id,
+                     char **fields, char **values, size_t numFields) {
+  uint64_t hashVal = hash(key) % store->size;
+  StoreEntry *entry = store->table[hashVal];
+
+  while (entry) {
+    if (strcmp(entry->key, key) == 0) {
+      break;
+    }
+    entry = entry->next;
+  }
+
+  if (!entry) {
+    entry = malloc(sizeof(StoreEntry));
+    entry->key = strdup(key);
+    entry->type = TYPE_STREAM;
+    entry->value.stream = createStream();
+    entry->next = store->table[hashVal];
+    store->table[hashVal] = entry;
+    store->used++;
+  }
+
+  return streamAdd(entry->value.stream, id, fields, values, numFields);
 }
 
 time_t getCurrentTimeMs(void) {
@@ -173,3 +202,4 @@ void freeStore(RedisStore *store) {
   free(store->table);
   free(store);
 }
+

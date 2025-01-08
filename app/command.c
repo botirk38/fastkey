@@ -1,4 +1,5 @@
 #include "command.h"
+#include "redis_store.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -38,6 +39,9 @@ static const char *handleType(RedisStore *store, RespValue *command) {
   switch (type) {
   case TYPE_STRING:
     return strdup("+string\r\n");
+
+  case TYPE_STREAM:
+    return strdup("+stream\r\n");
   case TYPE_NONE:
     return strdup("+none\r\n");
   default:
@@ -70,11 +74,38 @@ static const char *handlePing(RedisStore *store, RespValue *command) {
   return strdup("+PONG\r\n");
 }
 
+static const char *handleXadd(RedisStore *store, RespValue *command) {
+  RespValue *key = command->data.array.elements[1];
+  RespValue *id = command->data.array.elements[2];
+
+  size_t numFields = (command->data.array.len - 3) / 2;
+  char **fields = malloc(numFields * sizeof(char *));
+  char **values = malloc(numFields * sizeof(char *));
+
+  for (size_t i = 0; i < numFields; i++) {
+    fields[i] = command->data.array.elements[3 + i * 2]->data.string.str;
+    values[i] = command->data.array.elements[4 + i * 2]->data.string.str;
+  }
+
+  char *resultId =
+      storeStreamAdd(store, key->data.string.str, id->data.string.str, fields,
+                     values, numFields);
+
+  free(fields);
+  free(values);
+
+  size_t responseLen;
+  char *response = encodeBulkString(resultId, strlen(resultId), &responseLen);
+  free(resultId);
+  return response;
+}
+
 static CommandHandler baseCommands[] = {{"SET", handleSet, 3, 5},
                                         {"GET", handleGet, 2, 2},
                                         {"PING", handlePing, 1, 1},
                                         {"ECHO", handleEcho, 2, 2},
-                                        {"TYPE", handleType, 2, 2}
+                                        {"TYPE", handleType, 2, 2},
+                                        {"XADD", handleXadd, 4, -1}
 
 };
 static const size_t commandCount =
