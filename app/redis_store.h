@@ -23,6 +23,16 @@ typedef struct RedisStore {
   size_t used;
 } RedisStore;
 
+typedef enum ValueType {
+  TYPE_NONE,
+  TYPE_STRING,
+  TYPE_LIST,
+  TYPE_SET,
+  TYPE_ZSET,
+  TYPE_HASH,
+  TYPE_STREAM
+} ValueType;
+
 // Core operations
 RedisStore *createStore(void);
 void freeStore(RedisStore *store);
@@ -35,6 +45,10 @@ int setExpiry(RedisStore *store, const char *key, time_t expiry);
 int getExpiry(RedisStore *store, const char *key, time_t *expiry);
 void clearExpired(RedisStore *store);
 time_t getCurrentTimeMs(void);
+
+// Type Operations
+
+ValueType getValueType(RedisStore *store, const char *key);
 
 // Utility functions
 size_t storeSize(RedisStore *store);

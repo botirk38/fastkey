@@ -30,6 +30,21 @@ static const char *handleSet(RedisStore *store, RespValue *command) {
   return strdup("+OK\r\n");
 }
 
+static const char *handleType(RedisStore *store, RespValue *command) {
+  RespValue *key = command->data.array.elements[1];
+
+  ValueType type = getValueType(store, key->data.string.str);
+
+  switch (type) {
+  case TYPE_STRING:
+    return strdup("+string\r\n");
+  case TYPE_NONE:
+    return strdup("+none\r\n");
+  default:
+    return strdup("+none\r\n");
+  }
+}
+
 static const char *handleGet(RedisStore *store, RespValue *command) {
   RespValue *key = command->data.array.elements[1];
   size_t valueLen;
@@ -55,35 +70,20 @@ static const char *handlePing(RedisStore *store, RespValue *command) {
   return strdup("+PONG\r\n");
 }
 
-static CommandHandler baseCommands[] = {{"SET", handleSet, 3, 3},
+static CommandHandler baseCommands[] = {{"SET", handleSet, 3, 5},
                                         {"GET", handleGet, 2, 2},
-                                        {"PING", handlePing, 1, 1}};
+                                        {"PING", handlePing, 1, 1},
+                                        {"ECHO", handleEcho, 2, 2},
+                                        {"TYPE", handleType, 2, 2}
 
-CommandTable *createCommandTable(void) {
-  CommandTable *table = malloc(sizeof(CommandTable));
-  size_t commandsSize = sizeof(baseCommands);
-  table->commands = malloc(commandsSize);
-  memcpy(table->commands, baseCommands, commandsSize);
-  table->count = sizeof(baseCommands) / sizeof(CommandHandler);
-  return table;
-}
-
-void freeCommandTable(CommandTable *table) {
-  free(table->commands);
-  free(table);
-}
+};
+static const size_t commandCount =
+    sizeof(baseCommands) / sizeof(CommandHandler);
 
 const char *executeCommand(RedisStore *store, RespValue *command) {
   if (command->type != RespTypeArray || command->data.array.len < 1) {
     return strdup("-ERR wrong number of arguments\r\n");
   }
-
-  static CommandHandler baseCommands[] = {{"SET", handleSet, 3, 5},
-                                          {"GET", handleGet, 2, 2},
-                                          {"PING", handlePing, 1, 1},
-                                          {"ECHO", handleEcho, 2, 2}};
-  static const size_t commandCount =
-      sizeof(baseCommands) / sizeof(CommandHandler);
 
   RespValue *cmdName = command->data.array.elements[0];
 
@@ -100,4 +100,18 @@ const char *executeCommand(RedisStore *store, RespValue *command) {
   }
 
   return strdup("-ERR unknown command\r\n");
+}
+
+CommandTable *createCommandTable(void) {
+  CommandTable *table = malloc(sizeof(CommandTable));
+  size_t commandsSize = sizeof(baseCommands);
+  table->commands = malloc(commandsSize);
+  memcpy(table->commands, baseCommands, commandsSize);
+  table->count = sizeof(baseCommands) / sizeof(CommandHandler);
+  return table;
+}
+
+void freeCommandTable(CommandTable *table) {
+  free(table->commands);
+  free(table);
 }

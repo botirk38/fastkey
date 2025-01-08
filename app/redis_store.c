@@ -103,6 +103,24 @@ void *storeGet(RedisStore *store, const char *key, size_t *valueLen) {
   return NULL;
 }
 
+ValueType getValueType(RedisStore *store, const char *key) {
+  uint64_t hashVal = hash(key) % store->size;
+
+  StoreEntry *entry = store->table[hashVal];
+
+  while (entry) {
+    if (strcmp(entry->key, key) == 0) {
+      if (entry->expiry && entry->expiry < time(NULL)) {
+        return TYPE_NONE;
+      }
+      return TYPE_STRING;
+    }
+    entry = entry->next;
+  }
+
+  return TYPE_NONE;
+}
+
 int setExpiry(RedisStore *store, const char *key, time_t expiry) {
 
   uint64_t hashVal = hash(key) % store->size;
