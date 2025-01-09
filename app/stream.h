@@ -27,6 +27,9 @@ Stream *createStream(void);
 void freeStream(Stream *stream);
 char *streamAdd(Stream *stream, const char *id, char **fields, char **values,
                 size_t numFields);
+StreamEntry *streamRange(Stream *stream, const char *start, const char *end,
+                         size_t *count);
+void freeStreamEntry(StreamEntry *entry);
 
 // Stream IDs
 

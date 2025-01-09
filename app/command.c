@@ -1,5 +1,6 @@
 #include "command.h"
 #include "redis_store.h"
+#include "stream.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -88,7 +89,7 @@ static const char *handleXadd(RedisStore *store, RespValue *command) {
   free(values);
 
   if (result[0] == '-') {
-    char *response = createError(result + 1); // Skip "-"
+    char *response = createError(result + 1);
     free(result);
     return response;
   }
@@ -98,10 +99,38 @@ static const char *handleXadd(RedisStore *store, RespValue *command) {
   return response;
 }
 
+static const char *handleXrange(RedisStore *store, RespValue *command) {
+  RespValue *key = command->data.array.elements[1];
+  RespValue *start = command->data.array.elements[2];
+  RespValue *end = command->data.array.elements[3];
+
+  Stream *stream = storeGetStream(store, key->data.string.str);
+  if (!stream) {
+    return createStreamResponse(NULL, 0);
+  }
+
+  size_t count;
+  StreamEntry *entries =
+      streamRange(stream, start->data.string.str, end->data.string.str, &count);
+
+  char *response = createStreamResponse(entries, count);
+
+  // Clean up temporary entries
+  StreamEntry *current = entries;
+  while (current) {
+    StreamEntry *next = current->next;
+    freeStreamEntry(current);
+    current = next;
+  }
+
+  return response;
+}
+
 static CommandHandler baseCommands[] = {
-    {"SET", handleSet, 3, 5},   {"GET", handleGet, 2, 2},
-    {"PING", handlePing, 1, 1}, {"ECHO", handleEcho, 2, 2},
-    {"TYPE", handleType, 2, 2}, {"XADD", handleXadd, 4, -1}};
+    {"SET", handleSet, 3, 5},      {"GET", handleGet, 2, 2},
+    {"PING", handlePing, 1, 1},    {"ECHO", handleEcho, 2, 2},
+    {"TYPE", handleType, 2, 2},    {"XADD", handleXadd, 4, -1},
+    {"XRANGE", handleXrange, 4, 4}};
 
 static const size_t commandCount =
     sizeof(baseCommands) / sizeof(CommandHandler);

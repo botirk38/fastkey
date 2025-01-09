@@ -53,6 +53,7 @@ ValueType getValueType(RedisStore *store, const char *key);
 
 char *storeStreamAdd(RedisStore *store, const char *key, const char *id,
                      char **fields, char **values, size_t numFields);
+Stream *storeGetStream(RedisStore *store, const char *key);
 
 // Utility functions
 size_t storeSize(RedisStore *store);

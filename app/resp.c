@@ -228,3 +228,104 @@ char *createBulkString(const char *str, size_t len) {
 }
 
 char *createNullBulkString(void) { return strdup("$-1\r\n"); }
+
+char *createRespArray(const char **elements, size_t count) {
+  RespBuffer *buffer = createRespBuffer();
+
+  // Array header
+  char header[32];
+  snprintf(header, sizeof(header), "*%zu\r\n", count);
+  appendRespBuffer(buffer, header, strlen(header));
+
+  // Elements
+  for (size_t i = 0; i < count; i++) {
+    char *bulkStr = createBulkString(elements[i], strlen(elements[i]));
+    appendRespBuffer(buffer, bulkStr, strlen(bulkStr));
+    free(bulkStr);
+  }
+
+  char *result = strndup(buffer->buffer, buffer->used);
+  freeRespBuffer(buffer);
+  return result;
+}
+
+char *createRespArrayFromElements(RespValue **elements, size_t count) {
+  RespBuffer *buffer = createRespBuffer();
+
+  // Array header
+  char header[32];
+  snprintf(header, sizeof(header), "*%zu\r\n", count);
+  appendRespBuffer(buffer, header, strlen(header));
+
+  for (size_t i = 0; i < count; i++) {
+    char *elementStr;
+    switch (elements[i]->type) {
+    case RespTypeString:
+      elementStr = createBulkString(elements[i]->data.string.str,
+                                    elements[i]->data.string.len);
+      break;
+    case RespTypeInteger: {
+      char numStr[32];
+      snprintf(numStr, sizeof(numStr), "%lld", elements[i]->data.integer);
+      elementStr = createBulkString(numStr, strlen(numStr));
+      break;
+    }
+    case RespTypeArray:
+      elementStr = createRespArrayFromElements(elements[i]->data.array.elements,
+                                               elements[i]->data.array.len);
+      break;
+    default:
+      elementStr = createNullBulkString();
+    }
+    appendRespBuffer(buffer, elementStr, strlen(elementStr));
+    free(elementStr);
+  }
+
+  char *result = strndup(buffer->buffer, buffer->used);
+  freeRespBuffer(buffer);
+  return result;
+}
+
+char *createStreamResponse(StreamEntry *entries, size_t count) {
+  if (!entries || count == 0) {
+    return createRespArray(NULL, 0);
+  }
+
+  RespBuffer *buffer = createRespBuffer();
+
+  // Array header
+  char header[32];
+  snprintf(header, sizeof(header), "*%zu\r\n", count);
+  appendRespBuffer(buffer, header, strlen(header));
+
+  for (StreamEntry *entry = entries; entry; entry = entry->next) {
+    // Entry array header
+    appendRespBuffer(buffer, "*2\r\n", 4);
+
+    // ID
+    char *idStr = createBulkString(entry->id, strlen(entry->id));
+    appendRespBuffer(buffer, idStr, strlen(idStr));
+    free(idStr);
+
+    // Fields array header
+    char fieldsHeader[32];
+    snprintf(fieldsHeader, sizeof(fieldsHeader), "*%zu\r\n",
+             entry->numFields * 2);
+    appendRespBuffer(buffer, fieldsHeader, strlen(fieldsHeader));
+
+    for (size_t i = 0; i < entry->numFields; i++) {
+      char *fieldStr =
+          createBulkString(entry->fields[i], strlen(entry->fields[i]));
+      char *valueStr =
+          createBulkString(entry->values[i], strlen(entry->values[i]));
+      appendRespBuffer(buffer, fieldStr, strlen(fieldStr));
+      appendRespBuffer(buffer, valueStr, strlen(valueStr));
+      free(fieldStr);
+      free(valueStr);
+    }
+  }
+
+  char *result = strndup(buffer->buffer, buffer->used);
+  freeRespBuffer(buffer);
+  return result;
+}

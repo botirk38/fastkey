@@ -1,6 +1,7 @@
 #ifndef RESP_H
 #define RESP_H
 
+#include "stream.h"
 #include <stddef.h>
 
 /* Response status codes */
@@ -97,5 +98,10 @@ char *createError(const char *message);
 char *createInteger(long long num);
 char *createBulkString(const char *str, size_t len);
 char *createNullBulkString(void);
+char *createStreamResponse(StreamEntry *entries, size_t count);
+char *createRespArray(const char **elements, size_t count);
+char *createRespArrayFromElements(RespValue **elements, size_t count);
+char *createRespNestedArray(const char ***arrays, size_t *arraySizes,
+                            size_t arrayCount);
 
 #endif

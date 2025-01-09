@@ -10,6 +10,20 @@ static uint64_t getCurrentTimeMs() {
   return (uint64_t)tv.tv_sec * 1000 + (uint64_t)tv.tv_usec / 1000;
 }
 
+static bool isIdInRange(const StreamID *id, const StreamID *start,
+                        const StreamID *end) {
+  if (id->ms < start->ms || id->ms > end->ms) {
+    return false;
+  }
+  if (id->ms == start->ms && id->seq < start->seq) {
+    return false;
+  }
+  if (id->ms == end->ms && id->seq > end->seq) {
+    return false;
+  }
+  return true;
+}
+
 Stream *createStream(void) {
   Stream *stream = malloc(sizeof(Stream));
   stream->head = NULL;
@@ -142,4 +156,55 @@ void freeStream(Stream *stream) {
     current = next;
   }
   free(stream);
+}
+
+StreamEntry *streamRange(Stream *stream, const char *start, const char *end,
+                         size_t *count) {
+  StreamID startId, endId;
+  parseStreamID(start, &startId);
+  parseStreamID(end, &endId);
+
+  StreamEntry *result = NULL;
+  StreamEntry *resultTail = NULL;
+  *count = 0;
+
+  for (StreamEntry *entry = stream->head; entry; entry = entry->next) {
+    StreamID entryId;
+    parseStreamID(entry->id, &entryId);
+
+    if (isIdInRange(&entryId, &startId, &endId)) {
+      StreamEntry *newEntry = malloc(sizeof(StreamEntry));
+      newEntry->id = strdup(entry->id);
+      newEntry->numFields = entry->numFields;
+      newEntry->fields = malloc(entry->numFields * sizeof(char *));
+      newEntry->values = malloc(entry->numFields * sizeof(char *));
+      newEntry->next = NULL;
+
+      for (size_t i = 0; i < entry->numFields; i++) {
+        newEntry->fields[i] = strdup(entry->fields[i]);
+        newEntry->values[i] = strdup(entry->values[i]);
+      }
+
+      if (!result) {
+        result = newEntry;
+      } else {
+        resultTail->next = newEntry;
+      }
+      resultTail = newEntry;
+      (*count)++;
+    }
+  }
+
+  return result;
+}
+
+void freeStreamEntry(StreamEntry *entry) {
+  free(entry->id);
+  for (size_t i = 0; i < entry->numFields; i++) {
+    free(entry->fields[i]);
+    free(entry->values[i]);
+  }
+  free(entry->fields);
+  free(entry->values);
+  free(entry);
 }

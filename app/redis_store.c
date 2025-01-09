@@ -184,6 +184,23 @@ char *storeStreamAdd(RedisStore *store, const char *key, const char *id,
   return streamAdd(entry->value.stream, id, fields, values, numFields);
 }
 
+Stream *storeGetStream(RedisStore *store, const char *key) {
+  uint64_t hashVal = hash(key) % store->size;
+  StoreEntry *entry = store->table[hashVal];
+
+  while (entry) {
+    if (strcmp(entry->key, key) == 0) {
+      if (entry->type == TYPE_STREAM) {
+        return entry->value.stream;
+      }
+      return NULL;
+    }
+    entry = entry->next;
+  }
+
+  return NULL;
+}
+
 time_t getCurrentTimeMs(void) {
   struct timespec ts;
   clock_gettime(CLOCK_REALTIME, &ts);
@@ -202,4 +219,3 @@ void freeStore(RedisStore *store) {
   free(store->table);
   free(store);
 }
-
