@@ -160,9 +160,18 @@ void freeStream(Stream *stream) {
 
 StreamEntry *streamRange(Stream *stream, const char *start, const char *end,
                          size_t *count) {
-  StreamID startId, endId;
-  parseStreamID(start, &startId);
-  parseStreamID(end, &endId);
+  StreamID startId = {0, 0};
+  StreamID endId = {UINT64_MAX, UINT64_MAX};
+
+  // Handle special cases for start
+  if (strcmp(start, "-") != 0) {
+    parseStreamID(start, &startId);
+  }
+
+  // Handle special cases for end
+  if (strcmp(end, "+") != 0) {
+    parseStreamID(end, &endId);
+  }
 
   StreamEntry *result = NULL;
   StreamEntry *resultTail = NULL;
