@@ -24,6 +24,18 @@ static bool isIdInRange(const StreamID *id, const StreamID *start,
   return true;
 }
 
+int compareStreamIDs(const StreamID *id1, const StreamID *id2) {
+  if (id1->ms != id2->ms) {
+    return id1->ms > id2->ms ? 1 : -1;
+  }
+
+  if (id1->seq != id2->seq) {
+    return id1->seq > id2->seq ? 1 : -1;
+  }
+
+  return 0;
+}
+
 Stream *createStream(void) {
   Stream *stream = malloc(sizeof(Stream));
   stream->head = NULL;
@@ -182,6 +194,45 @@ StreamEntry *streamRange(Stream *stream, const char *start, const char *end,
     parseStreamID(entry->id, &entryId);
 
     if (isIdInRange(&entryId, &startId, &endId)) {
+      StreamEntry *newEntry = malloc(sizeof(StreamEntry));
+      newEntry->id = strdup(entry->id);
+      newEntry->numFields = entry->numFields;
+      newEntry->fields = malloc(entry->numFields * sizeof(char *));
+      newEntry->values = malloc(entry->numFields * sizeof(char *));
+      newEntry->next = NULL;
+
+      for (size_t i = 0; i < entry->numFields; i++) {
+        newEntry->fields[i] = strdup(entry->fields[i]);
+        newEntry->values[i] = strdup(entry->values[i]);
+      }
+
+      if (!result) {
+        result = newEntry;
+      } else {
+        resultTail->next = newEntry;
+      }
+      resultTail = newEntry;
+      (*count)++;
+    }
+  }
+
+  return result;
+}
+
+StreamEntry *streamRead(Stream *stream, const char *id, size_t *count) {
+  StreamID startId;
+  parseStreamID(id, &startId);
+
+  StreamEntry *result = NULL;
+  StreamEntry *resultTail = NULL;
+  *count = 0;
+
+  for (StreamEntry *entry = stream->head; entry; entry = entry->next) {
+    StreamID entryId;
+    parseStreamID(entry->id, &entryId);
+
+    // Only include entries with ID greater than the provided ID
+    if (compareStreamIDs(&entryId, &startId) > 0) {
       StreamEntry *newEntry = malloc(sizeof(StreamEntry));
       newEntry->id = strdup(entry->id);
       newEntry->numFields = entry->numFields;

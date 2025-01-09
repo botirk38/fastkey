@@ -286,7 +286,7 @@ char *createRespArrayFromElements(RespValue **elements, size_t count) {
   return result;
 }
 
-char *createStreamResponse(StreamEntry *entries, size_t count) {
+char *createXrangeResponse(StreamEntry *entries, size_t count) {
   if (!entries || count == 0) {
     return createRespArray(NULL, 0);
   }
@@ -323,6 +323,60 @@ char *createStreamResponse(StreamEntry *entries, size_t count) {
       free(fieldStr);
       free(valueStr);
     }
+  }
+
+  char *result = strndup(buffer->buffer, buffer->used);
+  freeRespBuffer(buffer);
+  return result;
+}
+
+char *createXreadResponse(const char *key, StreamEntry *entries, size_t count) {
+  if (!entries || count == 0) {
+    return strdup("*0\r\n");
+  }
+
+  RespBuffer *buffer = createRespBuffer();
+
+  // Build exact format:
+  // *1\r\n                     - Top array with 1 element
+  // *2\r\n                     - Stream array with key and entries
+  // $<keylen>\r\n<key>\r\n    - Stream key
+  // *1\r\n                     - Array of entries
+  // *2\r\n                     - Entry array (id + fields)
+  // $<idlen>\r\n<id>\r\n      - Entry ID
+  // *<numfields*2>\r\n        - Fields array
+  // $<fieldlen>\r\n<field>\r\n - Field name
+  // $<vallen>\r\n<value>\r\n   - Field value
+
+  char header[32];
+
+  appendRespBuffer(buffer, "*1\r\n*2\r\n", 8);
+
+  snprintf(header, sizeof(header), "$%zu\r\n", strlen(key));
+  appendRespBuffer(buffer, header, strlen(header));
+  appendRespBuffer(buffer, key, strlen(key));
+  appendRespBuffer(buffer, "\r\n", 2);
+
+  appendRespBuffer(buffer, "*1\r\n*2\r\n", 8);
+
+  snprintf(header, sizeof(header), "$%zu\r\n", strlen(entries->id));
+  appendRespBuffer(buffer, header, strlen(header));
+  appendRespBuffer(buffer, entries->id, strlen(entries->id));
+  appendRespBuffer(buffer, "\r\n", 2);
+
+  snprintf(header, sizeof(header), "*%zu\r\n", entries->numFields * 2);
+  appendRespBuffer(buffer, header, strlen(header));
+
+  for (size_t i = 0; i < entries->numFields; i++) {
+    snprintf(header, sizeof(header), "$%zu\r\n", strlen(entries->fields[i]));
+    appendRespBuffer(buffer, header, strlen(header));
+    appendRespBuffer(buffer, entries->fields[i], strlen(entries->fields[i]));
+    appendRespBuffer(buffer, "\r\n", 2);
+
+    snprintf(header, sizeof(header), "$%zu\r\n", strlen(entries->values[i]));
+    appendRespBuffer(buffer, header, strlen(header));
+    appendRespBuffer(buffer, entries->values[i], strlen(entries->values[i]));
+    appendRespBuffer(buffer, "\r\n", 2);
   }
 
   char *result = strndup(buffer->buffer, buffer->used);

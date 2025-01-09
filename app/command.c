@@ -1,6 +1,8 @@
 #include "command.h"
 #include "redis_store.h"
+#include "resp.h"
 #include "stream.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -106,14 +108,14 @@ static const char *handleXrange(RedisStore *store, RespValue *command) {
 
   Stream *stream = storeGetStream(store, key->data.string.str);
   if (!stream) {
-    return createStreamResponse(NULL, 0);
+    return createXrangeResponse(NULL, 0);
   }
 
   size_t count;
   StreamEntry *entries =
       streamRange(stream, start->data.string.str, end->data.string.str, &count);
 
-  char *response = createStreamResponse(entries, count);
+  char *response = createXrangeResponse(entries, count);
 
   // Clean up temporary entries
   StreamEntry *current = entries;
@@ -126,11 +128,49 @@ static const char *handleXrange(RedisStore *store, RespValue *command) {
   return response;
 }
 
+static const char *handleXread(RedisStore *store, RespValue *command) {
+  int streamsPos = -1;
+  for (size_t i = 1; i < command->data.array.len; i++) {
+    if (strcasecmp(command->data.array.elements[i]->data.string.str,
+                   "STREAMS") == 0) {
+      streamsPos = i;
+      break;
+    }
+  }
+
+  if (streamsPos == -1) {
+    return createError("ERR syntax error");
+  }
+
+  RespValue *key = command->data.array.elements[streamsPos + 1];
+  RespValue *id = command->data.array.elements[streamsPos + 2];
+
+  Stream *stream = storeGetStream(store, key->data.string.str);
+  if (!stream) {
+    return createRespArray(NULL, 0);
+  }
+
+  size_t count;
+  StreamEntry *entries = streamRead(stream, id->data.string.str, &count);
+  char *response = createXreadResponse(key->data.string.str, entries, count);
+
+  printf("Response: %s\n", response);
+
+  StreamEntry *current = entries;
+  while (current) {
+    StreamEntry *next = current->next;
+    freeStreamEntry(current);
+    current = next;
+  }
+
+  return response;
+}
+
 static CommandHandler baseCommands[] = {
-    {"SET", handleSet, 3, 5},      {"GET", handleGet, 2, 2},
-    {"PING", handlePing, 1, 1},    {"ECHO", handleEcho, 2, 2},
-    {"TYPE", handleType, 2, 2},    {"XADD", handleXadd, 4, -1},
-    {"XRANGE", handleXrange, 4, 4}};
+    {"SET", handleSet, 3, 5},       {"GET", handleGet, 2, 2},
+    {"PING", handlePing, 1, 1},     {"ECHO", handleEcho, 2, 2},
+    {"TYPE", handleType, 2, 2},     {"XADD", handleXadd, 4, -1},
+    {"XRANGE", handleXrange, 4, 4}, {"XREAD", handleXread, 4, -1}};
 
 static const size_t commandCount =
     sizeof(baseCommands) / sizeof(CommandHandler);
