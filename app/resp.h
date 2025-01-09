@@ -39,6 +39,12 @@ typedef struct RespValue {
   } data;
 } RespValue;
 
+typedef struct {
+  const char *key;
+  StreamEntry *entries;
+  size_t count;
+} StreamInfo;
+
 /**
  * Buffer for accumulating and parsing RESP data
  */
@@ -104,6 +110,6 @@ char *createRespNestedArray(const char ***arrays, size_t *arraySizes,
                             size_t arrayCount);
 
 char *createXrangeResponse(StreamEntry *entries, size_t count);
-char *createXreadResponse(const char *key, StreamEntry *entries, size_t count);
+char *createXreadResponse(StreamInfo *streams, size_t numStreams);
 
 #endif

@@ -130,6 +130,8 @@ static const char *handleXrange(RedisStore *store, RespValue *command) {
 
 static const char *handleXread(RedisStore *store, RespValue *command) {
   int streamsPos = -1;
+
+  // Find STREAMS argument position
   for (size_t i = 1; i < command->data.array.len; i++) {
     if (strcasecmp(command->data.array.elements[i]->data.string.str,
                    "STREAMS") == 0) {
@@ -142,26 +144,44 @@ static const char *handleXread(RedisStore *store, RespValue *command) {
     return createError("ERR syntax error");
   }
 
-  RespValue *key = command->data.array.elements[streamsPos + 1];
-  RespValue *id = command->data.array.elements[streamsPos + 2];
+  // Calculate number of streams
+  size_t numStreams = (command->data.array.len - streamsPos - 1) / 2;
 
-  Stream *stream = storeGetStream(store, key->data.string.str);
-  if (!stream) {
-    return createRespArray(NULL, 0);
+  // Create array of StreamInfo structs
+  StreamInfo *streams = malloc(numStreams * sizeof(StreamInfo));
+
+  // Process each stream
+  for (size_t i = 0; i < numStreams; i++) {
+    RespValue *key = command->data.array.elements[streamsPos + 1 + i];
+    RespValue *id =
+        command->data.array.elements[streamsPos + 1 + numStreams + i];
+
+    streams[i].key = key->data.string.str;
+    Stream *stream = storeGetStream(store, key->data.string.str);
+
+    if (!stream) {
+      streams[i].entries = NULL;
+      streams[i].count = 0;
+      continue;
+    }
+
+    streams[i].entries =
+        streamRead(stream, id->data.string.str, &streams[i].count);
   }
 
-  size_t count;
-  StreamEntry *entries = streamRead(stream, id->data.string.str, &count);
-  char *response = createXreadResponse(key->data.string.str, entries, count);
+  // Create response
+  char *response = createXreadResponse(streams, numStreams);
 
-  printf("Response: %s\n", response);
-
-  StreamEntry *current = entries;
-  while (current) {
-    StreamEntry *next = current->next;
-    freeStreamEntry(current);
-    current = next;
+  // Clean up
+  for (size_t i = 0; i < numStreams; i++) {
+    StreamEntry *current = streams[i].entries;
+    while (current) {
+      StreamEntry *next = current->next;
+      freeStreamEntry(current);
+      current = next;
+    }
   }
+  free(streams);
 
   return response;
 }

@@ -330,53 +330,63 @@ char *createXrangeResponse(StreamEntry *entries, size_t count) {
   return result;
 }
 
-char *createXreadResponse(const char *key, StreamEntry *entries, size_t count) {
-  if (!entries || count == 0) {
-    return strdup("*0\r\n");
-  }
-
+char *createXreadResponse(StreamInfo *streams, size_t numStreams) {
   RespBuffer *buffer = createRespBuffer();
 
-  // Build exact format:
-  // *1\r\n                     - Top array with 1 element
-  // *2\r\n                     - Stream array with key and entries
-  // $<keylen>\r\n<key>\r\n    - Stream key
-  // *1\r\n                     - Array of entries
-  // *2\r\n                     - Entry array (id + fields)
-  // $<idlen>\r\n<id>\r\n      - Entry ID
-  // *<numfields*2>\r\n        - Fields array
-  // $<fieldlen>\r\n<field>\r\n - Field name
-  // $<vallen>\r\n<value>\r\n   - Field value
-
+  // Top level array header for number of streams
   char header[32];
-
-  appendRespBuffer(buffer, "*1\r\n*2\r\n", 8);
-
-  snprintf(header, sizeof(header), "$%zu\r\n", strlen(key));
-  appendRespBuffer(buffer, header, strlen(header));
-  appendRespBuffer(buffer, key, strlen(key));
-  appendRespBuffer(buffer, "\r\n", 2);
-
-  appendRespBuffer(buffer, "*1\r\n*2\r\n", 8);
-
-  snprintf(header, sizeof(header), "$%zu\r\n", strlen(entries->id));
-  appendRespBuffer(buffer, header, strlen(header));
-  appendRespBuffer(buffer, entries->id, strlen(entries->id));
-  appendRespBuffer(buffer, "\r\n", 2);
-
-  snprintf(header, sizeof(header), "*%zu\r\n", entries->numFields * 2);
+  snprintf(header, sizeof(header), "*%zu\r\n", numStreams);
   appendRespBuffer(buffer, header, strlen(header));
 
-  for (size_t i = 0; i < entries->numFields; i++) {
-    snprintf(header, sizeof(header), "$%zu\r\n", strlen(entries->fields[i]));
-    appendRespBuffer(buffer, header, strlen(header));
-    appendRespBuffer(buffer, entries->fields[i], strlen(entries->fields[i]));
-    appendRespBuffer(buffer, "\r\n", 2);
+  // Process each stream
+  for (size_t i = 0; i < numStreams; i++) {
+    StreamInfo *streamInfo = &streams[i];
 
-    snprintf(header, sizeof(header), "$%zu\r\n", strlen(entries->values[i]));
-    appendRespBuffer(buffer, header, strlen(header));
-    appendRespBuffer(buffer, entries->values[i], strlen(entries->values[i]));
-    appendRespBuffer(buffer, "\r\n", 2);
+    // Stream array header (key + entries)
+    appendRespBuffer(buffer, "*2\r\n", 4);
+
+    // Stream key
+    char *keyStr = createBulkString(streamInfo->key, strlen(streamInfo->key));
+    appendRespBuffer(buffer, keyStr, strlen(keyStr));
+    free(keyStr);
+
+    if (!streamInfo->entries || streamInfo->count == 0) {
+      // Empty stream
+      appendRespBuffer(buffer, "*0\r\n", 4);
+      continue;
+    }
+
+    // Entries array header
+    appendRespBuffer(buffer, "*1\r\n", 4);
+
+    // Entry array (id + fields)
+    appendRespBuffer(buffer, "*2\r\n", 4);
+
+    // Entry ID
+    char *idStr = createBulkString(streamInfo->entries->id,
+                                   strlen(streamInfo->entries->id));
+    appendRespBuffer(buffer, idStr, strlen(idStr));
+    free(idStr);
+
+    // Fields array
+    char fieldsHeader[32];
+    snprintf(fieldsHeader, sizeof(fieldsHeader), "*%zu\r\n",
+             streamInfo->entries->numFields * 2);
+    appendRespBuffer(buffer, fieldsHeader, strlen(fieldsHeader));
+
+    // Fields and values
+    for (size_t j = 0; j < streamInfo->entries->numFields; j++) {
+      char *fieldStr = createBulkString(streamInfo->entries->fields[j],
+                                        strlen(streamInfo->entries->fields[j]));
+      char *valueStr = createBulkString(streamInfo->entries->values[j],
+                                        strlen(streamInfo->entries->values[j]));
+
+      appendRespBuffer(buffer, fieldStr, strlen(fieldStr));
+      appendRespBuffer(buffer, valueStr, strlen(valueStr));
+
+      free(fieldStr);
+      free(valueStr);
+    }
   }
 
   char *result = strndup(buffer->buffer, buffer->used);
