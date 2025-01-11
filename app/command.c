@@ -205,9 +205,9 @@ static const char *handleIncrement(RedisStore *store, RespValue *command) {
     return createInteger(numValue);
   }
 
-  // For now, return error if key doesn't exist
-  // This will be handled in later stages
-  return createError("ERR key not found");
+  storeSet(store, key->data.string.str, "1", 1);
+
+  return createInteger(1);
 }
 
 static CommandHandler baseCommands[] = {
