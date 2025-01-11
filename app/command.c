@@ -186,11 +186,36 @@ static const char *handleXread(RedisStore *store, RespValue *command) {
   return response;
 }
 
+static const char *handleIncrement(RedisStore *store, RespValue *command) {
+
+  RespValue *key = command->data.array.elements[1];
+  size_t valueLen;
+  void *value = storeGet(store, key->data.string.str, &valueLen);
+
+  if (value) {
+    long long numValue = atoll(value);
+    free(value);
+
+    numValue++;
+
+    char numStr[32];
+    snprintf(numStr, sizeof(numStr), "%lld", numValue);
+    storeSet(store, key->data.string.str, numStr, strlen(numStr));
+
+    return createInteger(numValue);
+  }
+
+  // For now, return error if key doesn't exist
+  // This will be handled in later stages
+  return createError("ERR key not found");
+}
+
 static CommandHandler baseCommands[] = {
     {"SET", handleSet, 3, 5},       {"GET", handleGet, 2, 2},
     {"PING", handlePing, 1, 1},     {"ECHO", handleEcho, 2, 2},
     {"TYPE", handleType, 2, 2},     {"XADD", handleXadd, 4, -1},
-    {"XRANGE", handleXrange, 4, 4}, {"XREAD", handleXread, 4, -1}};
+    {"XRANGE", handleXrange, 4, 4}, {"XREAD", handleXread, 4, -1},
+    {"INCR", handleIncrement, 2, 2}};
 
 static const size_t commandCount =
     sizeof(baseCommands) / sizeof(CommandHandler);
@@ -216,4 +241,3 @@ const char *executeCommand(RedisStore *store, RespValue *command) {
 
   return createError("unknown command");
 }
-
