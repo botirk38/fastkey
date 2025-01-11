@@ -1,5 +1,7 @@
 #include "client_handler.h"
 #include "command.h"
+#include "command_queue.h"
+#include "event_loop.h"
 #include "networking.h"
 #include <stdlib.h>
 #include <string.h>
@@ -14,6 +16,8 @@ void handleNewClient(EventLoop *loop, RedisServer *server, int clientFd) {
   ClientState *client = malloc(sizeof(ClientState));
   client->fd = clientFd;
   client->buffer = createRespBuffer();
+  client->in_transaction = 0;
+  client->queue = createCommandQueue();
 
   loop->clients[clientFd] = client;
   loop->clientCount++;
@@ -21,12 +25,13 @@ void handleNewClient(EventLoop *loop, RedisServer *server, int clientFd) {
   eventLoopAddFd(loop, clientFd, EPOLLIN);
 }
 
-void handleClientCommand(RedisServer *server, int fd, RespValue *command) {
+void handleClientCommand(RedisServer *server, int fd, RespValue *command,
+                         ClientState *clientState) {
   if (command->type != RespTypeArray || command->data.array.len < 1) {
     return;
   }
 
-  const char *response = executeCommand(server->db, command);
+  const char *response = executeCommand(server->db, command, clientState);
 
   sendReply(server, fd, response);
 }
@@ -50,7 +55,7 @@ void handleClientData(EventLoop *loop, RedisServer *server, int fd) {
 
   RespValue *command;
   while (parseResp(client->buffer, &command) == RESP_OK) {
-    handleClientCommand(server, fd, command);
+    handleClientCommand(server, fd, command, client);
     freeRespValue(command);
   }
 }

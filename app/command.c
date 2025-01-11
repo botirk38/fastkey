@@ -6,9 +6,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-static __thread int in_transaction = 0;
-
-static const char *handleSet(RedisStore *store, RespValue *command) {
+static const char *handleSet(RedisStore *store, RespValue *command,
+                             ClientState *clientState) {
   RespValue *key = command->data.array.elements[1];
   RespValue *value = command->data.array.elements[2];
 
@@ -36,7 +35,8 @@ static const char *handleSet(RedisStore *store, RespValue *command) {
   return createSimpleString("OK");
 }
 
-static const char *handleType(RedisStore *store, RespValue *command) {
+static const char *handleType(RedisStore *store, RespValue *command,
+                              ClientState *clientState) {
   RespValue *key = command->data.array.elements[1];
   ValueType type = getValueType(store, key->data.string.str);
 
@@ -51,7 +51,8 @@ static const char *handleType(RedisStore *store, RespValue *command) {
   }
 }
 
-static const char *handleGet(RedisStore *store, RespValue *command) {
+static const char *handleGet(RedisStore *store, RespValue *command,
+                             ClientState *clientState) {
   RespValue *key = command->data.array.elements[1];
   size_t valueLen;
   void *value = storeGet(store, key->data.string.str, &valueLen);
@@ -64,16 +65,19 @@ static const char *handleGet(RedisStore *store, RespValue *command) {
   return createNullBulkString();
 }
 
-static const char *handleEcho(RedisStore *store, RespValue *command) {
+static const char *handleEcho(RedisStore *store, RespValue *command,
+                              ClientState *clientState) {
   RespValue *message = command->data.array.elements[1];
   return createBulkString(message->data.string.str, message->data.string.len);
 }
 
-static const char *handlePing(RedisStore *store, RespValue *command) {
+static const char *handlePing(RedisStore *store, RespValue *command,
+                              ClientState *clientState) {
   return createSimpleString("PONG");
 }
 
-static const char *handleXadd(RedisStore *store, RespValue *command) {
+static const char *handleXadd(RedisStore *store, RespValue *command,
+                              ClientState *clientState) {
   RespValue *key = command->data.array.elements[1];
   RespValue *id = command->data.array.elements[2];
 
@@ -103,7 +107,8 @@ static const char *handleXadd(RedisStore *store, RespValue *command) {
   return response;
 }
 
-static const char *handleXrange(RedisStore *store, RespValue *command) {
+static const char *handleXrange(RedisStore *store, RespValue *command,
+                                ClientState *clientState) {
   RespValue *key = command->data.array.elements[1];
   RespValue *start = command->data.array.elements[2];
   RespValue *end = command->data.array.elements[3];
@@ -130,7 +135,8 @@ static const char *handleXrange(RedisStore *store, RespValue *command) {
   return response;
 }
 
-static const char *handleXread(RedisStore *store, RespValue *command) {
+static const char *handleXread(RedisStore *store, RespValue *command,
+                               ClientState *clientState) {
   int streamsPos = -1;
 
   // Find STREAMS argument position
@@ -188,7 +194,8 @@ static const char *handleXread(RedisStore *store, RespValue *command) {
   return response;
 }
 
-static const char *handleIncrement(RedisStore *store, RespValue *command) {
+static const char *handleIncrement(RedisStore *store, RespValue *command,
+                                   ClientState *clientState) {
   RespValue *key = command->data.array.elements[1];
   size_t valueLen;
   void *value = storeGet(store, key->data.string.str, &valueLen);
@@ -227,18 +234,19 @@ static const char *handleIncrement(RedisStore *store, RespValue *command) {
   return createInteger(1);
 }
 
-static const char *handleMulti(RedisStore *store, RespValue *command) {
-  in_transaction = 1;
-
+static const char *handleMulti(RedisStore *store, RespValue *command,
+                               ClientState *clientState) {
+  clientState->in_transaction = 1;
   return createSimpleString("OK");
 }
 
-static const char *handleExec(RedisStore *store, RespValue *command) {
-  if (!in_transaction) {
+static const char *handleExec(RedisStore *store, RespValue *command,
+                              ClientState *clientState) {
+  if (!clientState->in_transaction) {
     return createError("ERR EXEC without MULTI");
   }
 
-  in_transaction = 0;
+  clientState->in_transaction = 0;
   return createRespArray(NULL, 0);
 }
 
@@ -253,24 +261,47 @@ static CommandHandler baseCommands[] = {
 static const size_t commandCount =
     sizeof(baseCommands) / sizeof(CommandHandler);
 
-const char *executeCommand(RedisStore *store, RespValue *command) {
+const char *executeCommand(RedisStore *store, RespValue *command,
+                           ClientState *clientState) {
+  // Validate command format
   if (command->type != RespTypeArray || command->data.array.len < 1) {
     return createError("wrong number of arguments");
   }
 
   RespValue *cmdName = command->data.array.elements[0];
 
+  // Find the command handler
+  CommandHandler *handler = NULL;
   for (size_t i = 0; i < commandCount; i++) {
-    CommandHandler *handler = &baseCommands[i];
-    if (strcasecmp(cmdName->data.string.str, handler->name) == 0) {
-      if (command->data.array.len < handler->minArgs ||
-          (handler->maxArgs != -1 &&
-           command->data.array.len > handler->maxArgs)) {
-        return createError("wrong number of arguments");
-      }
-      return handler->handler(store, command);
+    if (strcasecmp(cmdName->data.string.str, baseCommands[i].name) == 0) {
+      handler = &baseCommands[i];
+      break;
     }
   }
 
-  return createError("unknown command");
+  // Handle unknown commands
+  if (!handler) {
+    return createError("unknown command");
+  }
+
+  // Validate argument count
+  if (command->data.array.len < handler->minArgs ||
+      (handler->maxArgs != -1 && command->data.array.len > handler->maxArgs)) {
+    return createError("wrong number of arguments");
+  }
+
+  // Handle transaction commands directly
+  if (strcasecmp(cmdName->data.string.str, "MULTI") == 0 ||
+      strcasecmp(cmdName->data.string.str, "EXEC") == 0) {
+    return handler->handler(store, command, clientState);
+  }
+
+  // Queue commands if in transaction
+  if (clientState->in_transaction) {
+    queueCommand(clientState->queue, command);
+    return createSimpleString("QUEUED");
+  }
+
+  // Execute command normally
+  return handler->handler(store, command, clientState);
 }

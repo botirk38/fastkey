@@ -1,7 +1,6 @@
 #ifndef SERVER_H
 #define SERVER_H
 
-#include "command.h"
 #include "redis_store.h"
 
 typedef struct RedisServer {
@@ -14,7 +13,6 @@ typedef struct RedisServer {
 
   // Data Storage
   RedisStore *db; // Main key-value storage
-  CommandTable *commands;
 
   // Server Statistics
   long long total_commands_processed;

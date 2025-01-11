@@ -1,6 +1,7 @@
 #ifndef EVENT_LOOP_H
 #define EVENT_LOOP_H
 
+#include "command_queue.h"
 #include "resp.h"
 #include "server.h"
 #include <stdlib.h>
@@ -12,6 +13,9 @@
 typedef struct {
   int fd;
   RespBuffer *buffer;
+  int in_transaction;
+  CommandQueue *queue;
+
 } ClientState;
 
 typedef struct {

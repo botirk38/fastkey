@@ -6,7 +6,8 @@
 #include "server.h"
 
 void handleNewClient(EventLoop *loop, RedisServer *server, int clientFd);
-void handleClientCommand(RedisServer *server, int fd, RespValue *command);
+void handleClientCommand(RedisServer *server, int fd, RespValue *command,
+                         ClientState *ClientState);
 void handleClientData(EventLoop *loop, RedisServer *server, int fd);
 
 #endif

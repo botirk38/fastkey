@@ -393,3 +393,39 @@ char *createXreadResponse(StreamInfo *streams, size_t numStreams) {
   freeRespBuffer(buffer);
   return result;
 }
+
+RespValue *cloneRespValue(RespValue *original) {
+  if (!original)
+    return NULL;
+
+  RespValue *clone = malloc(sizeof(RespValue));
+  clone->type = original->type;
+
+  switch (original->type) {
+  case RespTypeString:
+  case RespTypeBulk:
+  case RespTypeError:
+    clone->data.string.len = original->data.string.len;
+    clone->data.string.str = malloc(original->data.string.len + 1);
+    memcpy(clone->data.string.str, original->data.string.str,
+           original->data.string.len);
+    clone->data.string.str[original->data.string.len] = '\0';
+    break;
+
+  case RespTypeArray:
+    clone->data.array.len = original->data.array.len;
+    clone->data.array.elements =
+        malloc(sizeof(RespValue *) * original->data.array.len);
+    for (size_t i = 0; i < original->data.array.len; i++) {
+      clone->data.array.elements[i] =
+          cloneRespValue(original->data.array.elements[i]);
+    }
+    break;
+
+  case RespTypeInteger:
+    clone->data.integer = original->data.integer;
+    break;
+  }
+
+  return clone;
+}
