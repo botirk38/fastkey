@@ -197,13 +197,23 @@ static const char *handleIncrement(RedisStore *store, RespValue *command) {
     memcpy(numStr, value, valueLen);
     numStr[valueLen] = '\0';
 
-    long long numValue = atoll(numStr);
+    // Check if the string is a valid number
+    char *endptr;
+    long long numValue = strtoll(numStr, &endptr, 10);
+
+    // If endptr points to anything other than '\0', the string contains
+    // non-numeric characters
+    if (*endptr != '\0') {
+      free(value);
+      free(numStr);
+      return createError("ERR value is not an integer or out of range");
+    }
+
     free(value);
     free(numStr);
 
     numValue++;
 
-    // Convert back to string
     char newStr[32];
     snprintf(newStr, sizeof(newStr), "%lld", numValue);
     storeSet(store, key->data.string.str, newStr, strlen(newStr));
