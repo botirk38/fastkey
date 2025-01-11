@@ -187,26 +187,31 @@ static const char *handleXread(RedisStore *store, RespValue *command) {
 }
 
 static const char *handleIncrement(RedisStore *store, RespValue *command) {
-
   RespValue *key = command->data.array.elements[1];
   size_t valueLen;
   void *value = storeGet(store, key->data.string.str, &valueLen);
 
   if (value) {
-    long long numValue = atoll(value);
+    // Convert string to number and ensure it's null-terminated
+    char *numStr = malloc(valueLen + 1);
+    memcpy(numStr, value, valueLen);
+    numStr[valueLen] = '\0';
+
+    long long numValue = atoll(numStr);
     free(value);
+    free(numStr);
 
     numValue++;
 
-    char numStr[32];
-    snprintf(numStr, sizeof(numStr), "%lld", numValue);
-    storeSet(store, key->data.string.str, numStr, strlen(numStr));
+    // Convert back to string
+    char newStr[32];
+    snprintf(newStr, sizeof(newStr), "%lld", numValue);
+    storeSet(store, key->data.string.str, newStr, strlen(newStr));
 
     return createInteger(numValue);
   }
 
   storeSet(store, key->data.string.str, "1", 1);
-
   return createInteger(1);
 }
 
