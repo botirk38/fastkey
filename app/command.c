@@ -6,6 +6,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+static __thread int in_transaction = 0;
+
 static const char *handleSet(RedisStore *store, RespValue *command) {
   RespValue *key = command->data.array.elements[1];
   RespValue *value = command->data.array.elements[2];
@@ -226,11 +228,18 @@ static const char *handleIncrement(RedisStore *store, RespValue *command) {
 }
 
 static const char *handleMulti(RedisStore *store, RespValue *command) {
+  in_transaction = 1;
+
   return createSimpleString("OK");
 }
 
 static const char *handleExec(RedisStore *store, RespValue *command) {
-  return createError("ERR EXEC without MULTI");
+  if (!in_transaction) {
+    return createError("ERR EXEC without MULTI");
+  }
+
+  in_transaction = 0;
+  return createRespArray(NULL, 0);
 }
 
 static CommandHandler baseCommands[] = {
