@@ -229,12 +229,17 @@ static const char *handleMulti(RedisStore *store, RespValue *command) {
   return createSimpleString("OK");
 }
 
+static const char *handleExec(RedisStore *store, RespValue *command) {
+  return createError("ERR EXEC without MULTI");
+}
+
 static CommandHandler baseCommands[] = {
     {"SET", handleSet, 3, 5},        {"GET", handleGet, 2, 2},
     {"PING", handlePing, 1, 1},      {"ECHO", handleEcho, 2, 2},
     {"TYPE", handleType, 2, 2},      {"XADD", handleXadd, 4, -1},
     {"XRANGE", handleXrange, 4, 4},  {"XREAD", handleXread, 4, -1},
-    {"INCR", handleIncrement, 2, 2}, {"MULTI", handleMulti, 1, 1}};
+    {"INCR", handleIncrement, 2, 2}, {"MULTI", handleMulti, 1, 1},
+    {"EXEC", handleExec, 1, 1}};
 
 static const size_t commandCount =
     sizeof(baseCommands) / sizeof(CommandHandler);
