@@ -112,4 +112,5 @@ char *createRespNestedArray(const char ***arrays, size_t *arraySizes,
 char *createXrangeResponse(StreamEntry *entries, size_t count);
 char *createXreadResponse(StreamInfo *streams, size_t numStreams);
 RespValue *cloneRespValue(RespValue *original);
+RespValue *parseResponseToRespValue(const char *response);
 #endif

@@ -242,12 +242,50 @@ static const char *handleMulti(RedisStore *store, RespValue *command,
 
 static const char *handleExec(RedisStore *store, RespValue *command,
                               ClientState *clientState) {
+  printf("[EXEC] Starting transaction execution\n");
+
   if (!clientState->in_transaction) {
+    printf("[EXEC] Error: Not in transaction\n");
     return createError("ERR EXEC without MULTI");
   }
 
+  printf("[EXEC] Executing %zu queued commands\n", clientState->queue->size);
+
+  // Create array of responses
+  RespValue **responses =
+      malloc(clientState->queue->size * sizeof(RespValue *));
+
   clientState->in_transaction = 0;
-  return createRespArray(NULL, 0);
+
+  // Execute each queued command
+  for (size_t i = 0; i < clientState->queue->size; i++) {
+    RespValue *cmd = clientState->queue->commands[i];
+    printf("[EXEC] Executing command %zu: %s\n", i + 1,
+           cmd->data.array.elements[0]->data.string.str);
+
+    const char *response = executeCommand(store, cmd, clientState);
+    printf("[EXEC] Command response: %s\n", response);
+
+    responses[i] = parseResponseToRespValue(response);
+    free((void *)response);
+  }
+
+  printf("[EXEC] Creating final response array\n");
+  char *result =
+      createRespArrayFromElements(responses, clientState->queue->size);
+
+  // Cleanup
+  for (size_t i = 0; i < clientState->queue->size; i++) {
+    freeRespValue(responses[i]);
+  }
+  free(responses);
+
+  // Reset transaction state
+  clientState->in_transaction = 0;
+  clearCommandQueue(clientState->queue);
+
+  printf("[EXEC] Transaction completed successfully\n");
+  return result;
 }
 
 static CommandHandler baseCommands[] = {

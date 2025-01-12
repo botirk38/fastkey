@@ -261,22 +261,32 @@ char *createRespArrayFromElements(RespValue **elements, size_t count) {
     char *elementStr;
     switch (elements[i]->type) {
     case RespTypeString:
-      elementStr = createBulkString(elements[i]->data.string.str,
-                                    elements[i]->data.string.len);
+      elementStr = createSimpleString(elements[i]->data.string.str);
       break;
+
     case RespTypeInteger: {
-      char numStr[32];
-      snprintf(numStr, sizeof(numStr), "%lld", elements[i]->data.integer);
-      elementStr = createBulkString(numStr, strlen(numStr));
+      elementStr = createInteger(elements[i]->data.integer);
       break;
     }
+
     case RespTypeArray:
       elementStr = createRespArrayFromElements(elements[i]->data.array.elements,
                                                elements[i]->data.array.len);
       break;
+
+    case RespTypeBulk:
+      elementStr = createBulkString(elements[i]->data.string.str,
+                                    elements[i]->data.string.len);
+      break;
+
+    case RespTypeError:
+      elementStr = createError(elements[i]->data.string.str);
+      break;
+
     default:
       elementStr = createNullBulkString();
     }
+
     appendRespBuffer(buffer, elementStr, strlen(elementStr));
     free(elementStr);
   }
@@ -428,4 +438,46 @@ RespValue *cloneRespValue(RespValue *original) {
   }
 
   return clone;
+}
+
+RespValue *parseResponseToRespValue(const char *response) {
+  RespValue *value = malloc(sizeof(RespValue));
+  size_t consumed;
+
+  switch (response[0]) {
+  case '+':
+  case '-': {
+    char *line;
+    size_t lineLen;
+    parseLine(response, strlen(response), &lineLen, &line);
+    value->type = (response[0] == '+') ? RespTypeString : RespTypeError;
+    value = createRespString(line + 1,
+                             lineLen - 1); // -1 to skip the first char (+/-)
+    printf("Simple String: %s", value->data.string.str);
+    free(line);
+    break;
+  }
+
+  case ':': {
+    value->type = RespTypeInteger;
+    char *line;
+    size_t lineLen;
+    parseLine(response, strlen(response), &lineLen, &line);
+    value->data.integer = atoll(line + 1); // Skip the ':'
+    free(line);
+    break;
+  }
+
+  case '$': {
+    parseBulkString(response, strlen(response), &value, &consumed);
+    break;
+  }
+
+  case '*': {
+    parseArray(response, strlen(response), &value, &consumed);
+    break;
+  }
+  }
+
+  return value;
 }
