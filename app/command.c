@@ -1,4 +1,5 @@
 #include "command.h"
+#include "event_loop.h"
 #include "redis_store.h"
 #include "resp.h"
 #include "stream.h"
@@ -288,13 +289,26 @@ static const char *handleExec(RedisStore *store, RespValue *command,
   return result;
 }
 
+static const char *handleDiscard(RedisStore *store, RespValue *command,
+                                 ClientState *client) {
+  if (!client->in_transaction) {
+    const char *err = createError("ERR DISCARD without MULTI");
+    return err;
+  }
+
+  clearCommandQueue(client->queue);
+  client->in_transaction = false;
+  const char *res = createSimpleString("OK");
+  return res;
+}
+
 static CommandHandler baseCommands[] = {
     {"SET", handleSet, 3, 5},        {"GET", handleGet, 2, 2},
     {"PING", handlePing, 1, 1},      {"ECHO", handleEcho, 2, 2},
     {"TYPE", handleType, 2, 2},      {"XADD", handleXadd, 4, -1},
     {"XRANGE", handleXrange, 4, 4},  {"XREAD", handleXread, 4, -1},
     {"INCR", handleIncrement, 2, 2}, {"MULTI", handleMulti, 1, 1},
-    {"EXEC", handleExec, 1, 1}};
+    {"EXEC", handleExec, 1, 1},      {"DISCARD", handleDiscard, 0, -1}};
 
 static const size_t commandCount =
     sizeof(baseCommands) / sizeof(CommandHandler);
@@ -328,9 +342,9 @@ const char *executeCommand(RedisStore *store, RespValue *command,
     return createError("wrong number of arguments");
   }
 
-  // Handle transaction commands directly
   if (strcasecmp(cmdName->data.string.str, "MULTI") == 0 ||
-      strcasecmp(cmdName->data.string.str, "EXEC") == 0) {
+      strcasecmp(cmdName->data.string.str, "EXEC") == 0 ||
+      strcasecmp(cmdName->data.string.str, "DISCARD") == 0) {
     return handler->handler(store, command, clientState);
   }
 
