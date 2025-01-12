@@ -441,43 +441,61 @@ RespValue *cloneRespValue(RespValue *original) {
 }
 
 RespValue *parseResponseToRespValue(const char *response) {
+  printf("[PARSE] Parsing response: %s\n", response);
+
   RespValue *value = malloc(sizeof(RespValue));
   size_t consumed;
 
   switch (response[0]) {
   case '+':
   case '-': {
+    printf("[PARSE] Handling simple string/error\n");
     char *line;
     size_t lineLen;
     parseLine(response, strlen(response), &lineLen, &line);
-    value->type = (response[0] == '+') ? RespTypeString : RespTypeError;
-    value = createRespString(line + 1,
-                             lineLen - 1); // -1 to skip the first char (+/-)
-    printf("Simple String: %s", value->data.string.str);
+
+    RespValue *newValue = malloc(sizeof(RespValue));
+    newValue->type = (response[0] == '+') ? RespTypeString : RespTypeError;
+    newValue->data.string.str = strdup(line + 1);
+    newValue->data.string.len = lineLen - 1;
+
+    printf("[PARSE] Created %s: '%s'\n",
+           (response[0] == '+') ? "string" : "error",
+           newValue->data.string.str);
+
     free(line);
+    free(value);
+    value = newValue;
     break;
   }
 
   case ':': {
-    value->type = RespTypeInteger;
+    printf("[PARSE] Handling integer\n");
     char *line;
     size_t lineLen;
     parseLine(response, strlen(response), &lineLen, &line);
-    value->data.integer = atoll(line + 1); // Skip the ':'
+    value->type = RespTypeInteger;
+    value->data.integer = atoll(line + 1);
+    printf("[PARSE] Created integer: %lld\n", value->data.integer);
     free(line);
     break;
   }
 
   case '$': {
+    printf("[PARSE] Handling bulk string\n");
     parseBulkString(response, strlen(response), &value, &consumed);
+    printf("[PARSE] Created bulk string: '%s'\n", value->data.string.str);
     break;
   }
 
   case '*': {
+    printf("[PARSE] Handling array\n");
     parseArray(response, strlen(response), &value, &consumed);
+    printf("[PARSE] Created array with %zu elements\n", value->data.array.len);
     break;
   }
   }
 
+  printf("[PARSE] Parsing complete\n");
   return value;
 }
