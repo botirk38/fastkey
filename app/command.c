@@ -1,5 +1,6 @@
 #include "command.h"
 #include "event_loop.h"
+#include "rdb.h"
 #include "redis_store.h"
 #include "resp.h"
 #include "server.h"
@@ -333,14 +334,99 @@ static const char *handleConfigGet(RedisServer *server, RedisStore *store,
   return createRespArray(NULL, 0);
 }
 
+static const char *handleKeys(RedisServer *server, RedisStore *store,
+                              RespValue *command, ClientState *clientState) {
+  // Only support "*" pattern for now
+  RespValue *pattern = command->data.array.elements[1];
+  if (strcmp(pattern->data.string.str, "*") != 0) {
+    return createRespArray(NULL, 0);
+  }
+
+  // Try to read RDB file if it exists
+  RdbReader *reader = createRdbReader(server->dir, server->filename);
+  if (!reader) {
+    return createRespArray(NULL, 0);
+  }
+
+  // Validate RDB header
+  if (!validateHeader(reader)) {
+    freeRdbReader(reader);
+    return createRespArray(NULL, 0);
+  }
+
+  // Process each section until we find database
+  uint8_t type;
+  while ((type = readByte(reader)) != RDB_EOF) {
+    if (type == RDB_DATABASE_START) {
+      // Skip database number and hash table sizes
+      readLength(reader);
+      if (readByte(reader) == RDB_HASHTABLE_SIZE) {
+        readLength(reader); // Main hash table size
+        readLength(reader); // Expires hash table size
+      }
+      break;
+    }
+  }
+
+  // Read key-value pairs
+  RespValue **keys = NULL;
+  size_t keyCount = 0;
+  size_t capacity = 16;
+  keys = malloc(capacity * sizeof(RespValue *));
+
+  while ((type = readByte(reader)) != RDB_EOF) {
+    // Handle expiry if present
+    if (type == RDB_EXPIRE_MS) {
+      readUint64(reader);
+      type = readByte(reader);
+    } else if (type == RDB_EXPIRE_SEC) {
+      readUint32(reader);
+      type = readByte(reader);
+    }
+
+    // Read key
+    size_t keyLen;
+    char *keyStr = readString(reader, &keyLen);
+    if (!keyStr)
+      break;
+
+    // Skip value based on type
+    size_t valueLen;
+    if (type == RDB_TYPE_STRING) {
+      free(readString(reader, &valueLen));
+    }
+
+    // Add key to response array
+    if (keyCount == capacity) {
+      capacity *= 2;
+      keys = realloc(keys, capacity * sizeof(RespValue *));
+    }
+    keys[keyCount++] = createRespString(keyStr, keyLen);
+    free(keyStr);
+  }
+
+  // Create RESP array response
+  char *result = createRespArrayFromElements(keys, keyCount);
+
+  // Cleanup
+  for (size_t i = 0; i < keyCount; i++) {
+    freeRespValue(keys[i]);
+  }
+  free(keys);
+  freeRdbReader(reader);
+
+  return result;
+}
+
 static CommandHandler baseCommands[] = {
-    {"SET", handleSet, 3, 5},         {"GET", handleGet, 2, 2},
-    {"PING", handlePing, 1, 1},       {"ECHO", handleEcho, 2, 2},
-    {"TYPE", handleType, 2, 2},       {"XADD", handleXadd, 4, -1},
-    {"XRANGE", handleXrange, 4, 4},   {"XREAD", handleXread, 4, -1},
-    {"INCR", handleIncrement, 2, 2},  {"MULTI", handleMulti, 1, 1},
-    {"EXEC", handleExec, 1, 1},       {"DISCARD", handleDiscard, 0, -1},
-    {"CONFIG", handleConfigGet, 3, 3}};
+    {"SET", handleSet, 3, 5},          {"GET", handleGet, 2, 2},
+    {"PING", handlePing, 1, 1},        {"ECHO", handleEcho, 2, 2},
+    {"TYPE", handleType, 2, 2},        {"XADD", handleXadd, 4, -1},
+    {"XRANGE", handleXrange, 4, 4},    {"XREAD", handleXread, 4, -1},
+    {"INCR", handleIncrement, 2, 2},   {"MULTI", handleMulti, 1, 1},
+    {"EXEC", handleExec, 1, 1},        {"DISCARD", handleDiscard, 0, -1},
+    {"CONFIG", handleConfigGet, 3, 3}, {"KEYS", handleKeys, 2, 2},
+};
 
 static const size_t commandCount =
     sizeof(baseCommands) / sizeof(CommandHandler);

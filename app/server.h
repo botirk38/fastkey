@@ -15,6 +15,7 @@ typedef struct RedisServer {
   // Data Storage
   RedisStore *db; // Main key-value storage
 
+  // RDB File
   char *dir;
   char *filename;
 
