@@ -1,4 +1,5 @@
 #include "rdb.h"
+#include "redis_store.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -51,7 +52,7 @@ uint64_t readUint64(RdbReader *reader) {
   if (fread(&value, sizeof(value), 1, reader->fp) != 1)
     return 0;
   reader->pos += sizeof(value);
-  return be64toh(value);
+  return value;
 }
 
 size_t readLength(RdbReader *reader) {
@@ -165,13 +166,7 @@ void skipRdbValue(RdbReader *reader) {
 char *getRdbValue(RdbReader *reader, const char *targetKey, size_t *valueLen) {
   printf("[RDB] Starting to read RDB file for key: %s\n", targetKey);
 
-  if (!validateHeader(reader)) {
-    printf("[RDB] Header validation failed\n");
-    return NULL;
-  }
-
-  if (!findDatabaseSection(reader)) {
-    printf("[RDB] Database section not found\n");
+  if (!validateHeader(reader) || !findDatabaseSection(reader)) {
     return NULL;
   }
 
@@ -182,30 +177,27 @@ char *getRdbValue(RdbReader *reader, const char *targetKey, size_t *valueLen) {
     printf("[RDB] Reading entry type: 0x%02x\n", type);
 
     // Handle expiry
+    uint64_t expiry = 0;
     if (type == RDB_EXPIRE_MS) {
-      uint64_t expiry = readUint64(reader);
+      expiry = readUint64(reader);
       printf("[RDB] Found millisecond expiry: %llu\n", expiry);
       type = readByte(reader);
     } else if (type == RDB_EXPIRE_SEC) {
-      uint32_t expiry = readUint32(reader);
-      printf("[RDB] Found second expiry: %u\n", expiry);
+      expiry = readUint32(reader) * 1000;
+      printf("[RDB] Found second expiry: %llu\n", expiry);
       type = readByte(reader);
     }
 
     // Read key
     size_t keyLen;
     char *keyStr = readString(reader, &keyLen);
-    if (!keyStr) {
-      printf("[RDB] Failed to read key\n");
+    if (!keyStr)
       break;
-    }
 
     printf("[RDB] Read key: %s (length: %zu)\n", keyStr, keyLen);
-
     int keyMatch =
         (strlen(targetKey) == keyLen && memcmp(keyStr, targetKey, keyLen) == 0);
     printf("[RDB] Key match: %s\n", keyMatch ? "yes" : "no");
-
     free(keyStr);
 
     // Handle value based on type
@@ -213,21 +205,21 @@ char *getRdbValue(RdbReader *reader, const char *targetKey, size_t *valueLen) {
       printf("[RDB] Reading string value\n");
       char *value = readString(reader, valueLen);
 
-      if (value) {
-        printf("[RDB] Read value length: %zu\n", *valueLen);
-      } else {
-        printf("[RDB] Failed to read value\n");
-      }
-
       if (keyMatch) {
-        printf("[RDB] Found matching key-value pair\n");
+        time_t now = getCurrentTimeMs();
+        printf("[RDB] Expiry %llu\n", expiry);
+        printf("[RDB] Now %lu\n", now);
+        if (expiry > 0 && now >= expiry) {
+          printf("[RDB] Key expired at %llu, current time %lu\n", expiry, now);
+          free(value);
+          return NULL;
+        }
         return value;
       }
       free(value);
     }
   }
 
-  printf("[RDB] Reached end of file without finding key\n");
   return NULL;
 }
 
