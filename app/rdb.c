@@ -230,3 +230,51 @@ char *getRdbValue(RdbReader *reader, const char *targetKey, size_t *valueLen) {
   printf("[RDB] Reached end of file without finding key\n");
   return NULL;
 }
+
+RespValue **getRdbKeys(RdbReader *reader, size_t *keyCount) {
+  *keyCount = 0;
+
+  if (!validateHeader(reader) || !findDatabaseSection(reader)) {
+    return NULL;
+  }
+
+  // Initialize keys array
+  size_t capacity = 16;
+  RespValue **keys = malloc(capacity * sizeof(RespValue *));
+
+  uint8_t type;
+  while ((type = readByte(reader)) != RDB_EOF) {
+    // Handle expiry
+    if (type == RDB_EXPIRE_MS) {
+      readUint64(reader);
+      type = readByte(reader);
+    } else if (type == RDB_EXPIRE_SEC) {
+      readUint32(reader);
+      type = readByte(reader);
+    }
+
+    // Read key
+    size_t keyLen;
+    char *keyStr = readString(reader, &keyLen);
+    if (!keyStr)
+      break;
+
+    // Skip value
+    if (type == RDB_TYPE_STRING) {
+      skipRdbValue(reader);
+    }
+
+    // Grow array if needed
+    if (*keyCount == capacity) {
+      capacity *= 2;
+      keys = realloc(keys, capacity * sizeof(RespValue *));
+    }
+
+    // Add key to array
+    keys[*keyCount] = createRespString(keyStr, keyLen);
+    (*keyCount)++;
+    free(keyStr);
+  }
+
+  return keys;
+}

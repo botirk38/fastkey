@@ -355,76 +355,24 @@ static const char *handleConfigGet(RedisServer *server, RedisStore *store,
 
 static const char *handleKeys(RedisServer *server, RedisStore *store,
                               RespValue *command, ClientState *clientState) {
-  // Only support "*" pattern for now
   RespValue *pattern = command->data.array.elements[1];
   if (strcmp(pattern->data.string.str, "*") != 0) {
     return createRespArray(NULL, 0);
   }
 
-  // Try to read RDB file if it exists
   RdbReader *reader = createRdbReader(server->dir, server->filename);
   if (!reader) {
     return createRespArray(NULL, 0);
   }
 
-  // Validate RDB header
-  if (!validateHeader(reader)) {
-    freeRdbReader(reader);
+  size_t keyCount;
+  RespValue **keys = getRdbKeys(reader, &keyCount);
+  freeRdbReader(reader);
+
+  if (!keys) {
     return createRespArray(NULL, 0);
   }
 
-  // Process each section until we find database
-  uint8_t type;
-  while ((type = readByte(reader)) != RDB_EOF) {
-    if (type == RDB_DATABASE_START) {
-      // Skip database number and hash table sizes
-      readLength(reader);
-      if (readByte(reader) == RDB_HASHTABLE_SIZE) {
-        readLength(reader); // Main hash table size
-        readLength(reader); // Expires hash table size
-      }
-      break;
-    }
-  }
-
-  // Read key-value pairs
-  RespValue **keys = NULL;
-  size_t keyCount = 0;
-  size_t capacity = 16;
-  keys = malloc(capacity * sizeof(RespValue *));
-
-  while ((type = readByte(reader)) != RDB_EOF) {
-    // Handle expiry if present
-    if (type == RDB_EXPIRE_MS) {
-      readUint64(reader);
-      type = readByte(reader);
-    } else if (type == RDB_EXPIRE_SEC) {
-      readUint32(reader);
-      type = readByte(reader);
-    }
-
-    // Read key
-    size_t keyLen;
-    char *keyStr = readString(reader, &keyLen);
-    if (!keyStr)
-      break;
-
-    // Skip value based on type
-    size_t valueLen;
-    if (type == RDB_TYPE_STRING) {
-      free(readString(reader, &valueLen));
-    }
-
-    // Add key to response array
-    if (keyCount == capacity) {
-      capacity *= 2;
-      keys = realloc(keys, capacity * sizeof(RespValue *));
-    }
-    keys[keyCount++] = createRespString(keyStr, keyLen);
-    free(keyStr);
-  }
-
-  // Create RESP array response
   char *result = createRespArrayFromElements(keys, keyCount);
 
   // Cleanup
@@ -432,7 +380,6 @@ static const char *handleKeys(RedisServer *server, RedisStore *store,
     freeRespValue(keys[i]);
   }
   free(keys);
-  freeRdbReader(reader);
 
   return result;
 }

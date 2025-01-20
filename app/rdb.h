@@ -1,11 +1,11 @@
 #ifndef RDB_READER_H
 #define RDB_READER_H
 
+#include "resp.h"
 #include <arpa/inet.h>
 #include <endian.h>
 #include <stdint.h>
 #include <stdio.h>
-
 // File Format Constants
 #define RDB_MAGIC "REDIS"
 #define RDB_VERSION "0011"
@@ -63,5 +63,6 @@ int validateHeader(RdbReader *reader);
 char *getRdbValue(RdbReader *reader, const char *targetKey, size_t *valueLen);
 void skipRdbValue(RdbReader *reader);
 int findDatabaseSection(RdbReader *reader);
+RespValue **getRdbKeys(RdbReader *reader, size_t *keyCount);
 
 #endif
