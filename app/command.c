@@ -38,6 +38,39 @@ static const char *handleSet(RedisServer *server, RedisStore *store,
   return createSimpleString("OK");
 }
 
+static const char *handleGet(RedisServer *server, RedisStore *store,
+                             RespValue *command, ClientState *clientState) {
+  RespValue *key = command->data.array.elements[1];
+
+  // Check in-memory store first
+  size_t memValueLen;
+  void *memValue = storeGet(store, key->data.string.str, &memValueLen);
+  if (memValue) {
+    char *response = createBulkString(memValue, memValueLen);
+    free(memValue);
+    return response;
+  }
+
+  // Try reading from RDB file
+  RdbReader *reader = createRdbReader(server->dir, server->filename);
+  if (!reader) {
+    return createNullBulkString();
+  }
+
+  // Get value from RDB
+  size_t rdbValueLen;
+  char *rdbValue = getRdbValue(reader, key->data.string.str, &rdbValueLen);
+  freeRdbReader(reader);
+
+  if (rdbValue) {
+    char *response = createBulkString(rdbValue, rdbValueLen);
+    free(rdbValue);
+    return response;
+  }
+
+  return createNullBulkString();
+}
+
 static const char *handleType(RedisServer *server, RedisStore *store,
                               RespValue *command, ClientState *clientState) {
   RespValue *key = command->data.array.elements[1];
@@ -52,20 +85,6 @@ static const char *handleType(RedisServer *server, RedisStore *store,
   default:
     return createSimpleString("none");
   }
-}
-
-static const char *handleGet(RedisServer *server, RedisStore *store,
-                             RespValue *command, ClientState *clientState) {
-  RespValue *key = command->data.array.elements[1];
-  size_t valueLen;
-  void *value = storeGet(store, key->data.string.str, &valueLen);
-
-  if (value) {
-    char *response = createBulkString(value, valueLen);
-    free(value);
-    return response;
-  }
-  return createNullBulkString();
 }
 
 static const char *handleEcho(RedisServer *server, RedisStore *store,

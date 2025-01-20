@@ -141,3 +141,92 @@ int validateHeader(RdbReader *reader) {
 
   return strcmp(version, RDB_VERSION) == 0;
 }
+
+int findDatabaseSection(RdbReader *reader) {
+  uint8_t type;
+  while ((type = readByte(reader)) != RDB_EOF) {
+    if (type == RDB_DATABASE_START) {
+      readLength(reader); // Skip database number
+      if (readByte(reader) == RDB_HASHTABLE_SIZE) {
+        readLength(reader); // Skip hash table sizes
+        readLength(reader);
+      }
+      return 1;
+    }
+  }
+  return 0;
+}
+
+void skipRdbValue(RdbReader *reader) {
+  size_t skipLen;
+  free(readString(reader, &skipLen));
+}
+
+char *getRdbValue(RdbReader *reader, const char *targetKey, size_t *valueLen) {
+  printf("[RDB] Starting to read RDB file for key: %s\n", targetKey);
+
+  if (!validateHeader(reader)) {
+    printf("[RDB] Header validation failed\n");
+    return NULL;
+  }
+
+  if (!findDatabaseSection(reader)) {
+    printf("[RDB] Database section not found\n");
+    return NULL;
+  }
+
+  printf("[RDB] Successfully found database section\n");
+
+  uint8_t type;
+  while ((type = readByte(reader)) != RDB_EOF) {
+    printf("[RDB] Reading entry type: 0x%02x\n", type);
+
+    // Handle expiry
+    if (type == RDB_EXPIRE_MS) {
+      uint64_t expiry = readUint64(reader);
+      printf("[RDB] Found millisecond expiry: %llu\n", expiry);
+      type = readByte(reader);
+    } else if (type == RDB_EXPIRE_SEC) {
+      uint32_t expiry = readUint32(reader);
+      printf("[RDB] Found second expiry: %u\n", expiry);
+      type = readByte(reader);
+    }
+
+    // Read key
+    size_t keyLen;
+    char *keyStr = readString(reader, &keyLen);
+    if (!keyStr) {
+      printf("[RDB] Failed to read key\n");
+      break;
+    }
+
+    printf("[RDB] Read key: %s (length: %zu)\n", keyStr, keyLen);
+
+    int keyMatch =
+        (strlen(targetKey) == keyLen && memcmp(keyStr, targetKey, keyLen) == 0);
+    printf("[RDB] Key match: %s\n", keyMatch ? "yes" : "no");
+
+    free(keyStr);
+
+    // Handle value based on type
+    if (type == RDB_TYPE_STRING) {
+      printf("[RDB] Reading string value\n");
+      char *value = readString(reader, valueLen);
+
+      if (value) {
+        printf("[RDB] Read value length: %zu\n", *valueLen);
+      } else {
+        printf("[RDB] Failed to read value\n");
+      }
+
+      if (keyMatch) {
+        printf("[RDB] Found matching key-value pair\n");
+        return value;
+      }
+      free(value);
+    }
+  }
+
+  printf("[RDB] Reached end of file without finding key\n");
+  return NULL;
+}

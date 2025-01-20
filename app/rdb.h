@@ -60,4 +60,8 @@ char *readString(RdbReader *reader, size_t *length);
 char *readEncodedString(RdbReader *reader, size_t *length);
 int validateHeader(RdbReader *reader);
 
+char *getRdbValue(RdbReader *reader, const char *targetKey, size_t *valueLen);
+void skipRdbValue(RdbReader *reader);
+int findDatabaseSection(RdbReader *reader);
+
 #endif
