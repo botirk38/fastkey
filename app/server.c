@@ -1,17 +1,22 @@
 #include "server.h"
+#include "config.h"
 #include "networking.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-RedisServer *createServer(void) {
+RedisServer *createServer(ServerConfig *config) {
   RedisServer *server = calloc(1, sizeof(RedisServer));
   if (!server)
     return NULL;
 
   // Network defaults
-  server->port = 6379;
-  server->bindaddr = strdup("127.0.0.1");
+  server->port = config->port;
+  server->bindaddr = config->bindaddr;
+
+  server->dir = config->dir;
+  server->filename = config->dbfilename;
+
   server->tcp_backlog = 511;
   server->clients_count = 0;
 
@@ -54,6 +59,14 @@ void freeServer(RedisServer *server) {
 
   if (server->db) {
     freeStore(server->db);
+  }
+
+  if (server->dir) {
+    free(server->dir);
+  }
+
+  if (server->filename) {
+    free(server->filename);
   }
 
   free(server);

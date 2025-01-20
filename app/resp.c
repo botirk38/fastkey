@@ -56,7 +56,7 @@ static int parseLine(const char *data, size_t len, size_t *lineLen,
 /**
  * Creates a new RESP string value
  */
-static RespValue *createRespString(const char *str, size_t len) {
+RespValue *createRespString(const char *str, size_t len) {
   RespValue *value = malloc(sizeof(RespValue));
   value->type = RespTypeString;
   value->data.string.str = malloc(len + 1);

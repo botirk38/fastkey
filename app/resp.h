@@ -3,6 +3,7 @@
 
 #include "stream.h"
 #include <stddef.h>
+#include <sys/types.h>
 
 /* Response status codes */
 #define RESP_OK 0             /* Operation completed successfully */
@@ -111,6 +112,8 @@ char *createRespNestedArray(const char ***arrays, size_t *arraySizes,
 
 char *createXrangeResponse(StreamEntry *entries, size_t count);
 char *createXreadResponse(StreamInfo *streams, size_t numStreams);
+
+RespValue *createRespString(const char *str, size_t len);
 RespValue *cloneRespValue(RespValue *original);
 RespValue *parseResponseToRespValue(const char *response);
 #endif

@@ -1,6 +1,7 @@
 #ifndef SERVER_H
 #define SERVER_H
 
+#include "config.h"
 #include "redis_store.h"
 
 typedef struct RedisServer {
@@ -14,6 +15,9 @@ typedef struct RedisServer {
   // Data Storage
   RedisStore *db; // Main key-value storage
 
+  char *dir;
+  char *filename;
+
   // Server Statistics
   long long total_commands_processed;
   long long keyspace_hits;
@@ -25,7 +29,7 @@ typedef struct RedisServer {
  *
  * @return Pointer to new RedisServer instance, or NULL on failure
  */
-RedisServer *createServer(void);
+RedisServer *createServer(ServerConfig *config);
 
 /**
  * Initializes server components including networking and storage.

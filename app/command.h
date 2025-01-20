@@ -3,11 +3,12 @@
 
 #include "event_loop.h"
 #include "redis_store.h"
-#include "resp.h"
+#include "server.h"
 
 typedef struct {
   const char *name;
-  const char *(*handler)(RedisStore *, RespValue *, ClientState *);
+  const char *(*handler)(RedisServer *server, RedisStore *, RespValue *,
+                         ClientState *);
   int minArgs;
   int maxArgs;
 } CommandHandler;
@@ -17,7 +18,7 @@ typedef struct CommandTable {
   size_t count;
 } CommandTable;
 
-const char *executeCommand(RedisStore *store, RespValue *command,
-                           ClientState *client_state);
+const char *executeCommand(RedisServer *server, RedisStore *store,
+                           RespValue *command, ClientState *client_state);
 
 #endif

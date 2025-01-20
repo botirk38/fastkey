@@ -31,7 +31,8 @@ void handleClientCommand(RedisServer *server, int fd, RespValue *command,
     return;
   }
 
-  const char *response = executeCommand(server->db, command, clientState);
+  const char *response =
+      executeCommand(server, server->db, command, clientState);
 
   sendReply(server, fd, response);
 }

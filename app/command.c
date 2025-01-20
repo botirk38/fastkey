@@ -2,13 +2,14 @@
 #include "event_loop.h"
 #include "redis_store.h"
 #include "resp.h"
+#include "server.h"
 #include "stream.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-static const char *handleSet(RedisStore *store, RespValue *command,
-                             ClientState *clientState) {
+static const char *handleSet(RedisServer *server, RedisStore *store,
+                             RespValue *command, ClientState *clientState) {
   RespValue *key = command->data.array.elements[1];
   RespValue *value = command->data.array.elements[2];
 
@@ -36,8 +37,8 @@ static const char *handleSet(RedisStore *store, RespValue *command,
   return createSimpleString("OK");
 }
 
-static const char *handleType(RedisStore *store, RespValue *command,
-                              ClientState *clientState) {
+static const char *handleType(RedisServer *server, RedisStore *store,
+                              RespValue *command, ClientState *clientState) {
   RespValue *key = command->data.array.elements[1];
   ValueType type = getValueType(store, key->data.string.str);
 
@@ -52,8 +53,8 @@ static const char *handleType(RedisStore *store, RespValue *command,
   }
 }
 
-static const char *handleGet(RedisStore *store, RespValue *command,
-                             ClientState *clientState) {
+static const char *handleGet(RedisServer *server, RedisStore *store,
+                             RespValue *command, ClientState *clientState) {
   RespValue *key = command->data.array.elements[1];
   size_t valueLen;
   void *value = storeGet(store, key->data.string.str, &valueLen);
@@ -66,19 +67,19 @@ static const char *handleGet(RedisStore *store, RespValue *command,
   return createNullBulkString();
 }
 
-static const char *handleEcho(RedisStore *store, RespValue *command,
-                              ClientState *clientState) {
+static const char *handleEcho(RedisServer *server, RedisStore *store,
+                              RespValue *command, ClientState *clientState) {
   RespValue *message = command->data.array.elements[1];
   return createBulkString(message->data.string.str, message->data.string.len);
 }
 
-static const char *handlePing(RedisStore *store, RespValue *command,
-                              ClientState *clientState) {
+static const char *handlePing(RedisServer *server, RedisStore *store,
+                              RespValue *command, ClientState *clientState) {
   return createSimpleString("PONG");
 }
 
-static const char *handleXadd(RedisStore *store, RespValue *command,
-                              ClientState *clientState) {
+static const char *handleXadd(RedisServer *server, RedisStore *store,
+                              RespValue *command, ClientState *clientState) {
   RespValue *key = command->data.array.elements[1];
   RespValue *id = command->data.array.elements[2];
 
@@ -108,8 +109,8 @@ static const char *handleXadd(RedisStore *store, RespValue *command,
   return response;
 }
 
-static const char *handleXrange(RedisStore *store, RespValue *command,
-                                ClientState *clientState) {
+static const char *handleXrange(RedisServer *server, RedisStore *store,
+                                RespValue *command, ClientState *clientState) {
   RespValue *key = command->data.array.elements[1];
   RespValue *start = command->data.array.elements[2];
   RespValue *end = command->data.array.elements[3];
@@ -136,8 +137,8 @@ static const char *handleXrange(RedisStore *store, RespValue *command,
   return response;
 }
 
-static const char *handleXread(RedisStore *store, RespValue *command,
-                               ClientState *clientState) {
+static const char *handleXread(RedisServer *server, RedisStore *store,
+                               RespValue *command, ClientState *clientState) {
   int streamsPos = -1;
 
   // Find STREAMS argument position
@@ -195,7 +196,8 @@ static const char *handleXread(RedisStore *store, RespValue *command,
   return response;
 }
 
-static const char *handleIncrement(RedisStore *store, RespValue *command,
+static const char *handleIncrement(RedisServer *server, RedisStore *store,
+                                   RespValue *command,
                                    ClientState *clientState) {
   RespValue *key = command->data.array.elements[1];
   size_t valueLen;
@@ -235,14 +237,14 @@ static const char *handleIncrement(RedisStore *store, RespValue *command,
   return createInteger(1);
 }
 
-static const char *handleMulti(RedisStore *store, RespValue *command,
-                               ClientState *clientState) {
+static const char *handleMulti(RedisServer *server, RedisStore *store,
+                               RespValue *command, ClientState *clientState) {
   clientState->in_transaction = 1;
   return createSimpleString("OK");
 }
 
-static const char *handleExec(RedisStore *store, RespValue *command,
-                              ClientState *clientState) {
+static const char *handleExec(RedisServer *server, RedisStore *store,
+                              RespValue *command, ClientState *clientState) {
   printf("[EXEC] Starting transaction execution\n");
 
   if (!clientState->in_transaction) {
@@ -264,7 +266,7 @@ static const char *handleExec(RedisStore *store, RespValue *command,
     printf("[EXEC] Executing command %zu: %s\n", i + 1,
            cmd->data.array.elements[0]->data.string.str);
 
-    const char *response = executeCommand(store, cmd, clientState);
+    const char *response = executeCommand(server, store, cmd, clientState);
     printf("[EXEC] Command response: %s\n", response);
 
     responses[i] = parseResponseToRespValue(response);
@@ -289,8 +291,8 @@ static const char *handleExec(RedisStore *store, RespValue *command,
   return result;
 }
 
-static const char *handleDiscard(RedisStore *store, RespValue *command,
-                                 ClientState *client) {
+static const char *handleDiscard(RedisServer *server, RedisStore *store,
+                                 RespValue *command, ClientState *client) {
   if (!client->in_transaction) {
     const char *err = createError("ERR DISCARD without MULTI");
     return err;
@@ -302,19 +304,49 @@ static const char *handleDiscard(RedisStore *store, RespValue *command,
   return res;
 }
 
+static const char *handleConfigGet(RedisServer *server, RedisStore *store,
+                                   RespValue *command,
+                                   ClientState *clientState) {
+  // Get parameter name from command
+  RespValue *param = command->data.array.elements[2]; // CONFIG GET param
+
+  // Create array elements for response
+  RespValue *elements[2];
+
+  if (strcasecmp(param->data.string.str, "dir") == 0) {
+    // Create parameter name element
+    elements[0] = createRespString("dir", 3);
+    // Create parameter value element
+    elements[1] = createRespString(server->dir, strlen(server->dir));
+
+    // Create RESP array response
+    char *response = createRespArrayFromElements(elements, 2);
+
+    // Clean up
+    freeRespValue(elements[0]);
+    freeRespValue(elements[1]);
+
+    return response;
+  }
+
+  // For other parameters, return empty array
+  return createRespArray(NULL, 0);
+}
+
 static CommandHandler baseCommands[] = {
-    {"SET", handleSet, 3, 5},        {"GET", handleGet, 2, 2},
-    {"PING", handlePing, 1, 1},      {"ECHO", handleEcho, 2, 2},
-    {"TYPE", handleType, 2, 2},      {"XADD", handleXadd, 4, -1},
-    {"XRANGE", handleXrange, 4, 4},  {"XREAD", handleXread, 4, -1},
-    {"INCR", handleIncrement, 2, 2}, {"MULTI", handleMulti, 1, 1},
-    {"EXEC", handleExec, 1, 1},      {"DISCARD", handleDiscard, 0, -1}};
+    {"SET", handleSet, 3, 5},         {"GET", handleGet, 2, 2},
+    {"PING", handlePing, 1, 1},       {"ECHO", handleEcho, 2, 2},
+    {"TYPE", handleType, 2, 2},       {"XADD", handleXadd, 4, -1},
+    {"XRANGE", handleXrange, 4, 4},   {"XREAD", handleXread, 4, -1},
+    {"INCR", handleIncrement, 2, 2},  {"MULTI", handleMulti, 1, 1},
+    {"EXEC", handleExec, 1, 1},       {"DISCARD", handleDiscard, 0, -1},
+    {"CONFIG", handleConfigGet, 3, 3}};
 
 static const size_t commandCount =
     sizeof(baseCommands) / sizeof(CommandHandler);
 
-const char *executeCommand(RedisStore *store, RespValue *command,
-                           ClientState *clientState) {
+const char *executeCommand(RedisServer *server, RedisStore *store,
+                           RespValue *command, ClientState *clientState) {
   // Validate command format
   if (command->type != RespTypeArray || command->data.array.len < 1) {
     return createError("wrong number of arguments");
@@ -345,7 +377,7 @@ const char *executeCommand(RedisStore *store, RespValue *command,
   if (strcasecmp(cmdName->data.string.str, "MULTI") == 0 ||
       strcasecmp(cmdName->data.string.str, "EXEC") == 0 ||
       strcasecmp(cmdName->data.string.str, "DISCARD") == 0) {
-    return handler->handler(store, command, clientState);
+    return handler->handler(server, store, command, clientState);
   }
 
   // Queue commands if in transaction
@@ -355,5 +387,5 @@ const char *executeCommand(RedisStore *store, RespValue *command,
   }
 
   // Execute command normally
-  return handler->handler(store, command, clientState);
+  return handler->handler(server, store, command, clientState);
 }
