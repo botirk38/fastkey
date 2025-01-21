@@ -1,6 +1,7 @@
 #include "server.h"
 #include "config.h"
 #include "networking.h"
+#include "replication.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,20 +18,17 @@ RedisServer *createServer(ServerConfig *config) {
   server->dir = config->dir;
   server->filename = config->dbfilename;
 
+  server->repl_info = malloc(sizeof(ReplicationInfo));
+  server->repl_info->master_info = NULL;
+  server->repl_info->replication_id =
+      strdup("8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb");
+  server->repl_info->repl_offset = 0;
+
   if (config->is_replica) {
-    server->repl_info = malloc(sizeof(ReplicationInfo));
+    server->repl_info->master_info = malloc(sizeof(MasterInfo));
     server->repl_info->master_info->host = strdup(config->master_host);
     server->repl_info->master_info->port = config->master_port;
-
-  } else {
-
-    server->repl_info = malloc(sizeof(ReplicationInfo));
-    server->repl_info->master_info = NULL;
-    server->repl_info->replication_id =
-        strdup("8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb");
-    server->repl_info->repl_offset = 0;
   }
-
   server->tcp_backlog = 511;
   server->clients_count = 0;
 
@@ -54,6 +52,12 @@ int initServer(RedisServer *server) {
   if (initServerSocket(server) != 0) {
     fprintf(stderr, "Failed to initialize server socket\n");
     return 1;
+  }
+
+  if (server->repl_info->master_info) {
+    if (startReplication(server->repl_info->master_info) != 0) {
+      return 1;
+    }
   }
 
   return 0;

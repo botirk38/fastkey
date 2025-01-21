@@ -3,18 +3,7 @@
 
 #include "config.h"
 #include "redis_store.h"
-
-typedef struct {
-
-  char *host;
-  int port;
-} MasterInfo;
-
-typedef struct {
-  MasterInfo *master_info;
-  char *replication_id;
-  long long repl_offset;
-} ReplicationInfo;
+#include "replication.h"
 
 typedef struct RedisServer {
   // Networking
