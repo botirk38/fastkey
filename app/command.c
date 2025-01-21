@@ -384,15 +384,45 @@ static const char *handleKeys(RedisServer *server, RedisStore *store,
   return result;
 }
 
-static CommandHandler baseCommands[] = {
-    {"SET", handleSet, 3, 5},          {"GET", handleGet, 2, 2},
-    {"PING", handlePing, 1, 1},        {"ECHO", handleEcho, 2, 2},
-    {"TYPE", handleType, 2, 2},        {"XADD", handleXadd, 4, -1},
-    {"XRANGE", handleXrange, 4, 4},    {"XREAD", handleXread, 4, -1},
-    {"INCR", handleIncrement, 2, 2},   {"MULTI", handleMulti, 1, 1},
-    {"EXEC", handleExec, 1, 1},        {"DISCARD", handleDiscard, 0, -1},
-    {"CONFIG", handleConfigGet, 3, 3}, {"KEYS", handleKeys, 2, 2},
-};
+static const char *handleInfo(RedisServer *server, RedisStore *store,
+                              RespValue *command, ClientState *clientState) {
+  // Check if we have an argument
+  if (command->data.array.len > 1) {
+    RespValue *section = command->data.array.elements[1];
+
+    // Handle replication section
+    if (strcasecmp(section->data.string.str, "replication") == 0) {
+      const char *info = "role:master";
+      return createBulkString(info, strlen(info));
+    }
+  }
+
+  // Default response for no section specified
+  const char *info = "role:master";
+  return createBulkString(info, strlen(info));
+}
+
+static CommandHandler baseCommands[] = {{"SET", handleSet, 3, 5},
+                                        {"GET", handleGet, 2, 2},
+                                        {"PING", handlePing, 1, 1},
+                                        {"ECHO", handleEcho, 2, 2},
+                                        {"TYPE", handleType, 2, 2},
+                                        {"XADD", handleXadd, 4, -1},
+                                        {"XRANGE", handleXrange, 4, 4},
+                                        {"XREAD", handleXread, 4, -1},
+                                        {"INCR", handleIncrement, 2, 2},
+                                        {"MULTI", handleMulti, 1, 1},
+                                        {"EXEC", handleExec, 1, 1},
+                                        {"DISCARD", handleDiscard, 0, -1},
+                                        {"CONFIG", handleConfigGet, 3, 3},
+                                        {
+                                            "KEYS",
+                                            handleKeys,
+                                            2,
+                                            2,
+                                        },
+
+                                        {"INFO", handleInfo, 1, 2}};
 
 static const size_t commandCount =
     sizeof(baseCommands) / sizeof(CommandHandler);
