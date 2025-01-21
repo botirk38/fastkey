@@ -386,17 +386,13 @@ static const char *handleKeys(RedisServer *server, RedisStore *store,
 
 static const char *handleInfo(RedisServer *server, RedisStore *store,
                               RespValue *command, ClientState *clientState) {
-  if (command->data.array.len > 1) {
-    RespValue *section = command->data.array.elements[1];
+  const char *role = server->repl_info->master_info ? "slave" : "master";
 
-    if (strcasecmp(section->data.string.str, "replication") == 0) {
-      const char *role = server->repl_info ? "role:slave" : "role:master";
-      return createBulkString(role, strlen(role));
-    }
-  }
-
-  const char *role = server->repl_info ? "role:slave" : "role:master";
-  return createBulkString(role, strlen(role));
+  return createFormattedBulkString("role:%s\r\n"
+                                   "master_replid:%s\r\n"
+                                   "master_repl_offset:%lld",
+                                   role, server->repl_info->replication_id,
+                                   server->repl_info->repl_offset);
 }
 
 static CommandHandler baseCommands[] = {{"SET", handleSet, 3, 5},

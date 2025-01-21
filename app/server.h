@@ -5,8 +5,15 @@
 #include "redis_store.h"
 
 typedef struct {
-  char *master_host;
-  int master_port;
+
+  char *host;
+  int port;
+} MasterInfo;
+
+typedef struct {
+  MasterInfo *master_info;
+  char *replication_id;
+  long long repl_offset;
 } ReplicationInfo;
 
 typedef struct RedisServer {

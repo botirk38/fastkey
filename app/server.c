@@ -19,10 +19,16 @@ RedisServer *createServer(ServerConfig *config) {
 
   if (config->is_replica) {
     server->repl_info = malloc(sizeof(ReplicationInfo));
-    server->repl_info->master_host = strdup(config->master_host);
-    server->repl_info->master_port = config->master_port;
+    server->repl_info->master_info->host = strdup(config->master_host);
+    server->repl_info->master_info->port = config->master_port;
+
   } else {
-    server->repl_info = NULL;
+
+    server->repl_info = malloc(sizeof(ReplicationInfo));
+    server->repl_info->master_info = NULL;
+    server->repl_info->replication_id =
+        strdup("8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb");
+    server->repl_info->repl_offset = 0;
   }
 
   server->tcp_backlog = 511;
@@ -78,7 +84,8 @@ void freeServer(RedisServer *server) {
   }
 
   if (server->repl_info) {
-    free(server->repl_info->master_host);
+    free(server->repl_info->master_info->host);
+    free(server->repl_info->master_info);
     free(server->repl_info);
   }
 
