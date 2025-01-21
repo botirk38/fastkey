@@ -386,20 +386,17 @@ static const char *handleKeys(RedisServer *server, RedisStore *store,
 
 static const char *handleInfo(RedisServer *server, RedisStore *store,
                               RespValue *command, ClientState *clientState) {
-  // Check if we have an argument
   if (command->data.array.len > 1) {
     RespValue *section = command->data.array.elements[1];
 
-    // Handle replication section
     if (strcasecmp(section->data.string.str, "replication") == 0) {
-      const char *info = "role:master";
-      return createBulkString(info, strlen(info));
+      const char *role = server->repl_info ? "role:slave" : "role:master";
+      return createBulkString(role, strlen(role));
     }
   }
 
-  // Default response for no section specified
-  const char *info = "role:master";
-  return createBulkString(info, strlen(info));
+  const char *role = server->repl_info ? "role:slave" : "role:master";
+  return createBulkString(role, strlen(role));
 }
 
 static CommandHandler baseCommands[] = {{"SET", handleSet, 3, 5},

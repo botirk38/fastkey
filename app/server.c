@@ -17,6 +17,14 @@ RedisServer *createServer(ServerConfig *config) {
   server->dir = config->dir;
   server->filename = config->dbfilename;
 
+  if (config->is_replica) {
+    server->repl_info = malloc(sizeof(ReplicationInfo));
+    server->repl_info->master_host = strdup(config->master_host);
+    server->repl_info->master_port = config->master_port;
+  } else {
+    server->repl_info = NULL;
+  }
+
   server->tcp_backlog = 511;
   server->clients_count = 0;
 
@@ -67,6 +75,11 @@ void freeServer(RedisServer *server) {
 
   if (server->filename) {
     free(server->filename);
+  }
+
+  if (server->repl_info) {
+    free(server->repl_info->master_host);
+    free(server->repl_info);
   }
 
   free(server);

@@ -4,6 +4,11 @@
 #include "config.h"
 #include "redis_store.h"
 
+typedef struct {
+  char *master_host;
+  int master_port;
+} ReplicationInfo;
+
 typedef struct RedisServer {
   // Networking
   int fd;            // Main server socket file descriptor
@@ -18,6 +23,10 @@ typedef struct RedisServer {
   // RDB File
   char *dir;
   char *filename;
+
+  // Replication Info
+
+  ReplicationInfo *repl_info;
 
   // Server Statistics
   long long total_commands_processed;
