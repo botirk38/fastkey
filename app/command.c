@@ -405,12 +405,32 @@ static const char *handleReplConf(RedisServer *server, RedisStore *store,
 
 static const char *handlePsync(RedisServer *server, RedisStore *store,
                                RespValue *command, ClientState *clientState) {
+  static const unsigned char EMPTY_RDB[] = {0x52, 0x45, 0x44, 0x49, 0x53, 0x30,
+                                            0x30, 0x30, 0x39, 0xFF, 0x09, 0x0A,
+                                            0x40, 0x3F, 0x72, 0x6E, 0x64};
 
-  const char *res = createFormattedSimpleString(
+  RespBuffer *buffer = createRespBuffer();
+
+  // Add FULLRESYNC response using helper
+  char *fullresync = createFormattedSimpleString(
       "FULLRESYNC %s %lld", server->repl_info->replication_id,
       server->repl_info->repl_offset);
+  appendRespBuffer(buffer, fullresync, strlen(fullresync));
+  free(fullresync);
 
-  return res;
+  // Add RDB length prefix
+  char prefix[32];
+  int prefix_len =
+      snprintf(prefix, sizeof(prefix), "$%zu\r\n", sizeof(EMPTY_RDB));
+  appendRespBuffer(buffer, prefix, prefix_len);
+
+  // Add raw RDB data without \r\n
+  appendRespBuffer(buffer, (char *)EMPTY_RDB, sizeof(EMPTY_RDB));
+
+  char *response = strndup(buffer->buffer, buffer->used);
+  freeRespBuffer(buffer);
+
+  return response;
 }
 
 static CommandHandler baseCommands[] = {{"SET", handleSet, 3, 5},
