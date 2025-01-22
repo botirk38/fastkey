@@ -403,6 +403,16 @@ static const char *handleReplConf(RedisServer *server, RedisStore *store,
   return res;
 }
 
+static const char *handlePsync(RedisServer *server, RedisStore *store,
+                               RespValue *command, ClientState *clientState) {
+
+  const char *res = createFormattedSimpleString(
+      "FULLRESYNC %s %lld", server->repl_info->replication_id,
+      server->repl_info->repl_offset);
+
+  return res;
+}
+
 static CommandHandler baseCommands[] = {{"SET", handleSet, 3, 5},
                                         {"GET", handleGet, 2, 2},
                                         {"PING", handlePing, 1, 1},
@@ -424,7 +434,8 @@ static CommandHandler baseCommands[] = {{"SET", handleSet, 3, 5},
                                         },
 
                                         {"INFO", handleInfo, 1, 2},
-                                        {"REPLCONF", handleReplConf, 3, 3}};
+                                        {"REPLCONF", handleReplConf, 3, 3},
+                                        {"PSYNC", handlePsync, 3, 3}};
 
 static const size_t commandCount =
     sizeof(baseCommands) / sizeof(CommandHandler);

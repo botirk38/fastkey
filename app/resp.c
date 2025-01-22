@@ -226,6 +226,8 @@ char *createXreadResponse(StreamInfo *streams, size_t numStreams) {
   return result;
 }
 
+// Format Resp funcs
+
 char *createFormattedBulkString(const char *format, ...) {
   char buffer[4096];
   va_list args;
@@ -235,6 +237,17 @@ char *createFormattedBulkString(const char *format, ...) {
   va_end(args);
 
   return createBulkString(buffer, len);
+}
+
+char *createFormattedSimpleString(const char *format, ...) {
+  char buffer[4096];
+  va_list args;
+
+  va_start(args, format);
+  vsnprintf(buffer, sizeof(buffer), format, args);
+  va_end(args);
+
+  return createSimpleString(buffer);
 }
 
 /*
