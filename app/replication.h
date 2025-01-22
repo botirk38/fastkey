@@ -17,7 +17,7 @@ typedef struct {
 ReplicationInfo *createReplicationInfo(const char *host, int port);
 
 // Initiates connection to master and starts handshake
-int startReplication(MasterInfo *repl_info);
+int startReplication(MasterInfo *repl_info, int listening_port);
 
 // Frees replication resources
 void freeReplicationInfo(ReplicationInfo *repl_info);

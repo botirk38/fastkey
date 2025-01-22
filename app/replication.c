@@ -1,10 +1,9 @@
 #include "replication.h"
-#include <arpa/inet.h>
-#include <netinet/in.h>
+#include "networking.h"
+#include "resp.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h>
-#include <unistd.h>
 
 ReplicationInfo *createReplicationInfo(const char *host, int port) {
   ReplicationInfo *repl_info = malloc(sizeof(ReplicationInfo));
@@ -21,26 +20,85 @@ ReplicationInfo *createReplicationInfo(const char *host, int port) {
   return repl_info;
 }
 
-int startReplication(MasterInfo *master_info) {
-  int fd = socket(AF_INET, SOCK_STREAM, 0);
-  if (fd < 0)
+int startReplication(MasterInfo *master_info, int listening_port) {
+  printf("Starting replication with master %s:%d\n", master_info->host,
+         master_info->port);
+
+  int fd = connectToHost(master_info->host, master_info->port);
+  if (fd < 0) {
+    printf("Failed to connect to master %s:%d\n", master_info->host,
+           master_info->port);
     return -1;
+  }
+  printf("Successfully connected to master. Socket fd: %d\n", fd);
 
-  struct sockaddr_in master_addr;
-  memset(&master_addr, 0, sizeof(master_addr));
-  master_addr.sin_family = AF_INET;
-  master_addr.sin_port = htons(master_info->port);
-  inet_pton(AF_INET, master_info->host, &master_addr.sin_addr);
+  // Send PING command and wait for response
+  const char *ping_elements[] = {"PING"};
+  char *ping_cmd = createRespArray(ping_elements, 1);
+  printf("Sending PING command to master\n");
 
-  if (connect(fd, (struct sockaddr *)&master_addr, sizeof(master_addr)) < 0) {
+  if (writeExactly(fd, ping_cmd, strlen(ping_cmd)) < 0) {
+    printf("Failed to send PING command\n");
+    free(ping_cmd);
+    close(fd);
+    return -1;
+  }
+  printf("PING command sent successfully\n");
+  free(ping_cmd);
+
+  // Read PING response
+  char response[1024];
+  if (readExactly(fd, response, 5) < 0) { // Read "+PONG\r\n"
+    printf("Failed to read PING response\n");
     close(fd);
     return -1;
   }
 
-  const char *ping_cmd = "*1\r\n$4\r\nPING\r\n";
-  write(fd, ping_cmd, strlen(ping_cmd));
+  // Send REPLCONF listening-port
+  const char *replconf1_elements[] = {"REPLCONF", "listening-port", "6380"};
+  char *replconf1_cmd = createRespArray(replconf1_elements, 3);
+  printf("Sending REPLCONF listening-port command\n");
+
+  if (writeExactly(fd, replconf1_cmd, strlen(replconf1_cmd)) < 0) {
+    printf("Failed to send REPLCONF listening-port command\n");
+    free(replconf1_cmd);
+    close(fd);
+    return -1;
+  }
+  printf("REPLCONF listening-port command sent successfully\n");
+  free(replconf1_cmd);
+
+  // Read REPLCONF response
+  if (readExactly(fd, response, 5) < 0) { // Read "+OK\r\n"
+    printf("Failed to read REPLCONF response\n");
+    close(fd);
+    return -1;
+  }
+
+  // Send REPLCONF capabilities
+  const char *replconf2_elements[] = {"REPLCONF", "capa", "psync2"};
+  char *replconf2_cmd = createRespArray(replconf2_elements, 3);
+  printf("Sending REPLCONF capabilities command\n");
+
+  if (writeExactly(fd, replconf2_cmd, strlen(replconf2_cmd)) < 0) {
+    printf("Failed to send REPLCONF capabilities command\n");
+    free(replconf2_cmd);
+    close(fd);
+    return -1;
+  }
+  printf("REPLCONF capabilities command sent successfully\n");
+  free(replconf2_cmd);
+
+  // Read final response
+  if (readExactly(fd, response, 5) < 0) { // Read "+OK\r\n"
+    printf("Failed to read final response\n");
+    close(fd);
+    return -1;
+  }
 
   master_info->fd = fd;
+  printf("Replication setup completed successfully\n");
+
   return 0;
 }
 

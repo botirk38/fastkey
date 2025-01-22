@@ -21,4 +21,8 @@ int processInputBuffer(RedisServer *server, int client_fd);
 int sendReply(const RedisServer *server, const int client_fd,
               const char *reply);
 
+int connectToHost(const char *host, int port);
+int readExactly(int fd, char *buffer, size_t n);
+int writeExactly(int fd, const char *buffer, size_t n);
+
 #endif

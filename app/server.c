@@ -55,7 +55,7 @@ int initServer(RedisServer *server) {
   }
 
   if (server->repl_info->master_info) {
-    if (startReplication(server->repl_info->master_info) != 0) {
+    if (startReplication(server->repl_info->master_info, server->port) != 0) {
       return 1;
     }
   }

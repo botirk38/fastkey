@@ -242,8 +242,7 @@ char *createFormattedBulkString(const char *format, ...) {
  * -------------------------
  */
 
-static int parseLine(const char *data, size_t len, size_t *lineLen,
-                     char **line) {
+int parseLine(const char *data, size_t len, size_t *lineLen, char **line) {
   char *crlf = memmem(data, len, "\r\n", 2);
   if (!crlf)
     return RESP_INCOMPLETE;

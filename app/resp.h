@@ -98,6 +98,9 @@ void freeRespValue(RespValue *value);
  * @param outputLen Pointer to store output length
  * @return Newly allocated string containing RESP bulk string
  */
+
+int parseLine(const char *data, size_t len, size_t *lineLen, char **line);
+
 char *encodeBulkString(const char *str, size_t len, size_t *outputLen);
 
 char *createSimpleString(const char *str);

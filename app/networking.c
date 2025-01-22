@@ -111,3 +111,56 @@ void closeClientConnection(RedisServer *server, int client_fd) {
   server->clients_count--;
   printf("Client disconnected. Total clients: %d\n", server->clients_count);
 }
+
+int connectToHost(const char *host, int port) {
+  // Convert "localhost" to "127.0.0.1"
+  const char *ip = strcmp(host, "localhost") == 0 ? "127.0.0.1" : host;
+
+  int fd = socket(AF_INET, SOCK_STREAM, 0);
+  if (fd < 0) {
+    printf("Socket creation failed: %s\n", strerror(errno));
+    return -1;
+  }
+
+  struct sockaddr_in addr;
+  memset(&addr, 0, sizeof(addr));
+  addr.sin_family = AF_INET;
+  addr.sin_port = htons(port);
+
+  if (inet_pton(AF_INET, ip, &addr.sin_addr) <= 0) {
+    printf("Address conversion failed: %s\n", strerror(errno));
+    close(fd);
+    return -1;
+  }
+
+  if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+    printf("Connection failed: %s\n", strerror(errno));
+    close(fd);
+    return -1;
+  }
+
+  printf("Successfully connected to %s:%d\n", ip, port);
+  return fd;
+}
+
+int readExactly(int fd, char *buffer, size_t n) {
+  size_t total = 0;
+  while (total < n) {
+    ssize_t count = read(fd, buffer + total, n - total);
+    if (count <= 0)
+      return -1;
+    total += count;
+  }
+  return 0;
+}
+
+int writeExactly(int fd, const char *buffer, size_t n) {
+  size_t total = 0;
+  while (total < n) {
+    ssize_t count = write(fd, buffer + total, n - total);
+    if (count <= 0)
+      return -1;
+    total += count;
+  }
+  return 0;
+}
