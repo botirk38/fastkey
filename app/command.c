@@ -395,6 +395,14 @@ static const char *handleInfo(RedisServer *server, RedisStore *store,
                                    server->repl_info->repl_offset);
 }
 
+static const char *handleReplConf(RedisServer *server, RedisStore *store,
+                                  RespValue *command,
+                                  ClientState *clientState) {
+
+  const char *res = createSimpleString("OK");
+  return res;
+}
+
 static CommandHandler baseCommands[] = {{"SET", handleSet, 3, 5},
                                         {"GET", handleGet, 2, 2},
                                         {"PING", handlePing, 1, 1},
@@ -415,7 +423,8 @@ static CommandHandler baseCommands[] = {{"SET", handleSet, 3, 5},
                                             2,
                                         },
 
-                                        {"INFO", handleInfo, 1, 2}};
+                                        {"INFO", handleInfo, 1, 2},
+                                        {"REPLCONF", handleReplConf, 3, 3}};
 
 static const size_t commandCount =
     sizeof(baseCommands) / sizeof(CommandHandler);
