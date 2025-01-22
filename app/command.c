@@ -405,6 +405,10 @@ static const char *handleReplConf(RedisServer *server, RedisStore *store,
 
 static const char *handlePsync(RedisServer *server, RedisStore *store,
                                RespValue *command, ClientState *clientState) {
+
+  if (server->repl_info->master_info != NULL)
+    return NULL;
+
   static const unsigned char EMPTY_RDB[] = {0x52, 0x45, 0x44, 0x49, 0x53, 0x30,
                                             0x30, 0x30, 0x39, 0xFF, 0x09, 0x0A,
                                             0x40, 0x3F, 0x72, 0x6E, 0x64};
