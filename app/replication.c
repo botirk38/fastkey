@@ -96,6 +96,19 @@ int startReplication(MasterInfo *master_info, int listening_port) {
     return -1;
   }
 
+  // Send PSYNC command
+  const char *psync_elements[] = {"PSYNC", "?", "-1"};
+  char *psync_cmd = createRespArray(psync_elements, 3);
+  printf("Sending PSYNC command\n");
+
+  if (writeExactly(fd, psync_cmd, strlen(psync_cmd)) < 0) {
+    printf("Failed to send PSYNC command\n");
+    free(psync_cmd);
+    close(fd);
+    return -1;
+  }
+  free(psync_cmd);
+
   master_info->fd = fd;
   printf("Replication setup completed successfully\n");
 
