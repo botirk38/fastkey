@@ -1,6 +1,7 @@
 #include "server.h"
 #include "config.h"
 #include "networking.h"
+#include "replicas.h"
 #include "replication.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -20,6 +21,7 @@ RedisServer *createServer(ServerConfig *config) {
 
   server->repl_info = malloc(sizeof(ReplicationInfo));
   server->repl_info->master_info = NULL;
+  server->repl_info->replicas = NULL;
   server->repl_info->replication_id =
       strdup("8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb");
   server->repl_info->repl_offset = 0;
@@ -28,6 +30,8 @@ RedisServer *createServer(ServerConfig *config) {
     server->repl_info->master_info = malloc(sizeof(MasterInfo));
     server->repl_info->master_info->host = strdup(config->master_host);
     server->repl_info->master_info->port = config->master_port;
+  } else {
+    initReplicaList(server);
   }
   server->tcp_backlog = 511;
   server->clients_count = 0;
@@ -88,8 +92,14 @@ void freeServer(RedisServer *server) {
   }
 
   if (server->repl_info) {
-    free(server->repl_info->master_info->host);
-    free(server->repl_info->master_info);
+
+    if (server->repl_info->master_info) {
+      free(server->repl_info->master_info->host);
+      free(server->repl_info->master_info);
+    } else {
+      freeReplicas(server);
+    }
+
     free(server->repl_info);
   }
 

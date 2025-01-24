@@ -2,6 +2,7 @@
 #include "event_loop.h"
 #include "rdb.h"
 #include "redis_store.h"
+#include "replicas.h"
 #include "resp.h"
 #include "server.h"
 #include "stream.h"
@@ -434,6 +435,8 @@ static const char *handlePsync(RedisServer *server, RedisStore *store,
   char *response = strndup(buffer->buffer, buffer->used);
   freeRespBuffer(buffer);
 
+  addReplica(server, clientState->fd);
+
   return response;
 }
 
@@ -506,5 +509,14 @@ const char *executeCommand(RedisServer *server, RedisStore *store,
   }
 
   // Execute command normally
-  return handler->handler(server, store, command, clientState);
+  const char *result = handler->handler(server, store, command, clientState);
+
+  if (strcasecmp(cmdName->data.string.str, "SET") == 0 ||
+      strcasecmp(cmdName->data.string.str, "DEL") == 0 ||
+      strcasecmp(cmdName->data.string.str, "INCR") == 0 ||
+      strcasecmp(cmdName->data.string.str, "XADD") == 0) {
+    propagateCommand(server, command);
+  }
+
+  return result;
 }
