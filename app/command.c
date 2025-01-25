@@ -511,7 +511,8 @@ const char *executeCommand(RedisServer *server, RedisStore *store,
   // Execute command normally
   const char *result = handler->handler(server, store, command, clientState);
 
-  if (strcasecmp(cmdName->data.string.str, "SET") == 0 ||
+  if (!server->repl_info->master_info &&
+          strcasecmp(cmdName->data.string.str, "SET") == 0 ||
       strcasecmp(cmdName->data.string.str, "DEL") == 0 ||
       strcasecmp(cmdName->data.string.str, "INCR") == 0 ||
       strcasecmp(cmdName->data.string.str, "XADD") == 0) {

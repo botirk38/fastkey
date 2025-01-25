@@ -5,6 +5,8 @@
 #include "redis_store.h"
 #include "replication.h"
 
+#include <pthread.h>
+
 typedef struct RedisServer {
   // Networking
   int fd;            // Main server socket file descriptor
@@ -29,6 +31,11 @@ typedef struct RedisServer {
   long long keyspace_hits;
   long long keyspace_misses;
 } RedisServer;
+
+typedef struct PropagationArgs {
+  RedisServer *server;
+  int fd;
+} PropagationArgs;
 
 /**
  * Creates a new Redis server instance with default configuration.
@@ -62,5 +69,8 @@ void freeServer(RedisServer *server);
  * @param server Pointer to RedisServer instance
  */
 void serverCron(RedisServer *server);
+
+int handlePropagatedCommands(RedisServer *server, int fd);
+void *handlePropagatedCommandsThread(void *args);
 
 #endif
