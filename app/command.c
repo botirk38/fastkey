@@ -399,6 +399,24 @@ static const char *handleInfo(RedisServer *server, RedisStore *store,
 static const char *handleReplConf(RedisServer *server, RedisStore *store,
                                   RespValue *command,
                                   ClientState *clientState) {
+  RespValue *subcommand = command->data.array.elements[1];
+
+  if (strcasecmp(subcommand->data.string.str, "getack") == 0) {
+    // Create REPLCONF ACK response with offset 0
+    RespValue *elements[3];
+    elements[0] = createRespString("REPLCONF", 8);
+    elements[1] = createRespString("ACK", 3);
+    elements[2] = createRespString("0", 1);
+
+    char *response = createRespArrayFromElements(elements, 3);
+
+    // Clean up
+    freeRespValue(elements[0]);
+    freeRespValue(elements[1]);
+    freeRespValue(elements[2]);
+
+    return response;
+  }
 
   const char *res = createSimpleString("OK");
   return res;

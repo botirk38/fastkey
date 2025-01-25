@@ -79,6 +79,14 @@ int handlePropagatedCommands(RedisServer *server, int fd) {
 
           if (response) {
             printf("[Replication] Command executed (response discarded)\n");
+
+            if (strcasecmp(command->data.array.elements[0]->data.string.str,
+                           "REPLCONF") == 0 &&
+                command->data.array.len > 1 &&
+                strcasecmp(command->data.array.elements[1]->data.string.str,
+                           "GETACK") == 0) {
+              send(fd, response, strlen(response), 0);
+            }
             free((void *)response);
           }
         }
