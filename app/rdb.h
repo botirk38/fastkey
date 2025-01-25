@@ -3,7 +3,13 @@
 
 #include "resp.h"
 #include <arpa/inet.h>
+
+#ifdef __linux__
 #include <endian.h>
+#elif defined(__APPLE__)
+#include <machine/endian.h>
+#endif
+
 #include <stdint.h>
 #include <stdio.h>
 // File Format Constants
