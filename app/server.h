@@ -2,10 +2,8 @@
 #define SERVER_H
 
 #include "config.h"
+#include "handshake.h"
 #include "redis_store.h"
-#include "replication.h"
-
-#include <pthread.h>
 
 typedef struct RedisServer {
   // Networking
@@ -32,10 +30,10 @@ typedef struct RedisServer {
   long long keyspace_misses;
 } RedisServer;
 
-typedef struct PropagationArgs {
+typedef struct {
   RedisServer *server;
   int fd;
-} PropagationArgs;
+} ReplicationArgs;
 
 /**
  * Creates a new Redis server instance with default configuration.
@@ -70,7 +68,6 @@ void freeServer(RedisServer *server);
  */
 void serverCron(RedisServer *server);
 
-int handlePropagatedCommands(RedisServer *server, int fd);
-void *handlePropagatedCommandsThread(void *args);
+int handleReplicationCommands(RedisServer *server, int fd);
 
 #endif

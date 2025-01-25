@@ -3,9 +3,18 @@
 #include "command_queue.h"
 #include "event_loop.h"
 #include "networking.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+
+#ifdef __linux__
+#include <sys/epoll.h>
+#define EVENT_READ EPOLLIN
+#elif defined(__APPLE__)
+#include <sys/event.h>
+#define EVENT_READ EVFILT_READ
+#endif
 
 void handleNewClient(EventLoop *loop, RedisServer *server, int clientFd) {
   if (clientFd >= MAX_CLIENTS) {
@@ -22,7 +31,7 @@ void handleNewClient(EventLoop *loop, RedisServer *server, int clientFd) {
   loop->clients[clientFd] = client;
   loop->clientCount++;
 
-  eventLoopAddFd(loop, clientFd, EPOLLIN);
+  eventLoopAddFd(loop, clientFd, EVENT_READ);
 }
 
 void handleClientCommand(RedisServer *server, int fd, RespValue *command,

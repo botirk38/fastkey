@@ -1,26 +1,57 @@
 #include "server.h"
 #include "command.h"
 #include "config.h"
+#include "event_loop.h"
 #include "networking.h"
 #include "replicas.h"
-#include "replication.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-void *handlePropagatedCommandsThread(void *args) {
-  PropagationArgs *prop_args = (PropagationArgs *)args;
-  RedisServer *server = prop_args->server;
-  int fd = prop_args->fd;
+;
 
-  handlePropagatedCommands(server, fd);
+void *handleReplicationThread(void *args) {
+  ReplicationArgs *repl_args = (ReplicationArgs *)args;
+  RedisServer *server = repl_args->server;
+  int fd = repl_args->fd;
 
-  free(prop_args);
+  handleReplicationCommands(server, fd);
+  free(repl_args);
   return NULL;
 }
 
-int handlePropagatedCommands(RedisServer *server, int fd) {
-  printf("[Replication] Starting command propagation processing\n");
+static bool isValidCommand(RespValue *command) {
+  return command->type == RespTypeArray && command->data.array.len > 0 &&
+         command->data.array.elements[0] &&
+         command->data.array.elements[0]->type == RespTypeString;
+}
+
+static bool isReplconfGetack(RespValue *command) {
+  return strcasecmp(command->data.array.elements[0]->data.string.str,
+                    "REPLCONF") == 0 &&
+         command->data.array.len > 1 &&
+         strcasecmp(command->data.array.elements[1]->data.string.str,
+                    "GETACK") == 0;
+}
+
+static void processCommand(RedisServer *server, RespValue *command, int fd) {
+  printf("[Replication] Processing command: %s\n",
+         command->data.array.elements[0]->data.string.str);
+
+  ClientState clientState = {0};
+  const char *response =
+      executeCommand(server, server->db, command, &clientState);
+
+  if (response) {
+    if (isReplconfGetack(command)) {
+      send(fd, response, strlen(response), 0);
+    }
+    free((void *)response);
+  }
+}
+
+int handleReplicationCommands(RedisServer *server, int fd) {
+  printf("[Replication] Starting command processing\n");
 
   RespBuffer *resp_buffer = createRespBuffer();
   if (!resp_buffer) {
@@ -32,9 +63,8 @@ int handlePropagatedCommands(RedisServer *server, int fd) {
   ssize_t n = 0;
 
   while ((n = recv(fd, read_buffer, sizeof(read_buffer), 0)) > 0) {
-    read_buffer[n] = '\0'; // Null terminate for safe printing
-    printf("[Replication] Received %zd bytes from master\n", n);
-    printf("[Replication] Raw buffer contents:\n%s\n", read_buffer);
+    read_buffer[n] = '\0';
+    printf("[Replication] Received %zd bytes\n", n);
 
     if (appendRespBuffer(resp_buffer, read_buffer, n) != RESP_OK) {
       printf("[Error] Failed to append to RESP buffer\n");
@@ -42,63 +72,25 @@ int handlePropagatedCommands(RedisServer *server, int fd) {
       return -1;
     }
 
-    printf("[Replication] Current RESP buffer contents (%zu bytes):\n%s\n",
-           resp_buffer->used, resp_buffer->buffer);
-
     while (1) {
       RespValue *command = NULL;
       int parse_result = parseResp(resp_buffer, &command);
 
       if (parse_result == RESP_INCOMPLETE) {
-        printf("[Replication] Incomplete command, waiting for more data\n");
-        printf("[Replication] Remaining buffer (%zu bytes):\n%s\n",
-               resp_buffer->used, resp_buffer->buffer);
         break;
       }
 
       if (parse_result == RESP_OK && command) {
-        if (command->type == RespTypeArray && command->data.array.len > 0 &&
-            command->data.array.elements[0] &&
-            command->data.array.elements[0]->type == RespTypeString) {
-
-          printf("[Replication] Processing command: %s with %lu arguments\n",
-                 command->data.array.elements[0]->data.string.str,
-                 command->data.array.len - 1);
-
-          // Log command arguments
-          for (int i = 1; i < command->data.array.len; i++) {
-            if (command->data.array.elements[i]->type == RespTypeString) {
-              printf("[Replication] Arg %d: %s\n", i,
-                     command->data.array.elements[i]->data.string.str);
-            }
-          }
-
-          ClientState clientState = {0};
-          const char *response =
-              executeCommand(server, server->db, command, &clientState);
-
-          if (response) {
-            printf("[Replication] Command executed (response discarded)\n");
-
-            if (strcasecmp(command->data.array.elements[0]->data.string.str,
-                           "REPLCONF") == 0 &&
-                command->data.array.len > 1 &&
-                strcasecmp(command->data.array.elements[1]->data.string.str,
-                           "GETACK") == 0) {
-              send(fd, response, strlen(response), 0);
-            }
-            free((void *)response);
-          }
+        if (isValidCommand(command)) {
+          processCommand(server, command, fd);
         }
         freeRespValue(command);
-      } else if (parse_result != RESP_INCOMPLETE) {
-        printf("[Error] Failed to parse command (error: %d)\n", parse_result);
       }
     }
   }
 
   if (n == 0) {
-    printf("[Replication] Master closed connection\n");
+    printf("[Replication] Master connection closed\n");
   } else if (n < 0) {
     printf("[Error] Read error from master: %s\n", strerror(errno));
   }
@@ -115,10 +107,10 @@ RedisServer *createServer(ServerConfig *config) {
   // Network defaults
   server->port = config->port;
   server->bindaddr = config->bindaddr;
-
   server->dir = config->dir;
   server->filename = config->dbfilename;
 
+  // Initialize replication info
   server->repl_info = malloc(sizeof(ReplicationInfo));
   server->repl_info->master_info = NULL;
   server->repl_info->replicas = NULL;
@@ -133,6 +125,7 @@ RedisServer *createServer(ServerConfig *config) {
   } else {
     initReplicaList(server);
   }
+
   server->tcp_backlog = 511;
   server->clients_count = 0;
 
@@ -152,33 +145,31 @@ RedisServer *createServer(ServerConfig *config) {
 }
 
 int initServer(RedisServer *server) {
-  // Initialize networking
   if (initServerSocket(server) != 0) {
     fprintf(stderr, "Failed to initialize server socket\n");
     return 1;
   }
 
+  // Handle replication if we're a replica
   if (server->repl_info->master_info) {
     if (startReplication(server->repl_info->master_info, server->port) != 0) {
       return 1;
     }
 
-    // Create thread arguments
-    PropagationArgs *args = malloc(sizeof(PropagationArgs));
+    // Initialize replication thread
+    ReplicationArgs *args = malloc(sizeof(ReplicationArgs));
     args->server = server;
     args->fd = server->repl_info->master_info->fd;
 
-    // Create thread
-    pthread_t propagation_thread;
-    if (pthread_create(&propagation_thread, NULL,
-                       handlePropagatedCommandsThread, args) != 0) {
-      printf("Failed to create propagation thread\n");
+    pthread_t replication_thread;
+    if (pthread_create(&replication_thread, NULL, handleReplicationThread,
+                       args) != 0) {
+      printf("Failed to create replication thread\n");
       free(args);
       return 1;
     }
 
-    // Detach thread to allow it to clean up automatically
-    pthread_detach(propagation_thread);
+    pthread_detach(replication_thread);
   }
 
   return 0;
@@ -209,26 +200,16 @@ void freeServer(RedisServer *server) {
   }
 
   if (server->repl_info) {
-
     if (server->repl_info->master_info) {
       free(server->repl_info->master_info->host);
       free(server->repl_info->master_info);
     } else {
       freeReplicas(server);
     }
-
     free(server->repl_info);
   }
 
   free(server);
 }
 
-void serverCron(RedisServer *server) {
-  // Clean up expired keys
-  clearExpired(server->db);
-
-  // Future implementations:
-  // - Update statistics
-  // - Check replication status
-  // - Memory usage monitoring
-}
+void serverCron(RedisServer *server) { clearExpired(server->db); }

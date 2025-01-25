@@ -22,6 +22,7 @@ typedef struct {
   char *replication_id;
   long long repl_offset;
   Replicas *replicas; // Only if server is master
+  size_t processed_bytes;
 } ReplicationInfo;
 
 // Creates replication info for a replica

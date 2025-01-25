@@ -1,5 +1,4 @@
 #include "replicas.h"
-#include "replication.h"
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
