@@ -18,6 +18,8 @@ void closeClientConnection(RedisServer *server, int client_fd);
 
 // Protocol handling
 int processInputBuffer(RedisServer *server, int client_fd);
+int readLine(int fd, char *buffer, size_t max_len);
+
 int sendReply(const RedisServer *server, const int client_fd,
               const char *reply);
 

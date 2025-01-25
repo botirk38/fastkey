@@ -164,3 +164,24 @@ int writeExactly(int fd, const char *buffer, size_t n) {
   }
   return 0;
 }
+
+int readLine(int fd, char *buffer, size_t max_len) {
+  size_t total_read = 0;
+  char c;
+
+  while (total_read < max_len - 1) {
+    ssize_t n = read(fd, &c, 1);
+    if (n <= 0) {
+      return -1;
+    }
+
+    buffer[total_read++] = c;
+
+    if (c == '\n' && total_read >= 2 && buffer[total_read - 2] == '\r') {
+      break;
+    }
+  }
+
+  buffer[total_read] = '\0';
+  return total_read;
+}

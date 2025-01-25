@@ -32,86 +32,103 @@ int startReplication(MasterInfo *master_info, int listening_port) {
   }
   printf("Successfully connected to master. Socket fd: %d\n", fd);
 
-  // Send PING command and wait for response
+  // PING handshake
   const char *ping_elements[] = {"PING"};
   char *ping_cmd = createRespArray(ping_elements, 1);
-  printf("Sending PING command to master\n");
-
   if (writeExactly(fd, ping_cmd, strlen(ping_cmd)) < 0) {
-    printf("Failed to send PING command\n");
     free(ping_cmd);
     close(fd);
     return -1;
   }
-  printf("PING command sent successfully\n");
   free(ping_cmd);
 
-  // Read PING response
+  // Wait for PONG
   char response[1024];
-  if (readExactly(fd, response, 5) < 0) { // Read "+PONG\r\n"
-    printf("Failed to read PING response\n");
+  ssize_t n = readLine(fd, response, sizeof(response));
+  if (n <= 0 || strncmp(response, "+PONG", 5) != 0) {
     close(fd);
     return -1;
   }
 
-  // Send REPLCONF listening-port
-  const char *replconf1_elements[] = {"REPLCONF", "listening-port", "6380"};
+  // REPLCONF listening-port
+  char port_str[32];
+  snprintf(port_str, sizeof(port_str), "%d", listening_port);
+  const char *replconf1_elements[] = {"REPLCONF", "listening-port", port_str};
   char *replconf1_cmd = createRespArray(replconf1_elements, 3);
-  printf("Sending REPLCONF listening-port command\n");
-
   if (writeExactly(fd, replconf1_cmd, strlen(replconf1_cmd)) < 0) {
-    printf("Failed to send REPLCONF listening-port command\n");
     free(replconf1_cmd);
     close(fd);
     return -1;
   }
-  printf("REPLCONF listening-port command sent successfully\n");
   free(replconf1_cmd);
 
-  // Read REPLCONF response
-  if (readExactly(fd, response, 5) < 0) { // Read "+OK\r\n"
-    printf("Failed to read REPLCONF response\n");
+  // Wait for OK
+  n = readLine(fd, response, sizeof(response));
+  if (n <= 0 || strncmp(response, "+OK", 3) != 0) {
     close(fd);
     return -1;
   }
 
-  // Send REPLCONF capabilities
+  // REPLCONF capabilities
   const char *replconf2_elements[] = {"REPLCONF", "capa", "psync2"};
   char *replconf2_cmd = createRespArray(replconf2_elements, 3);
-  printf("Sending REPLCONF capabilities command\n");
-
   if (writeExactly(fd, replconf2_cmd, strlen(replconf2_cmd)) < 0) {
-    printf("Failed to send REPLCONF capabilities command\n");
     free(replconf2_cmd);
     close(fd);
     return -1;
   }
-  printf("REPLCONF capabilities command sent successfully\n");
   free(replconf2_cmd);
 
-  // Read final response
-  if (readExactly(fd, response, 5) < 0) { // Read "+OK\r\n"
-    printf("Failed to read final response\n");
+  // Wait for OK
+  n = readLine(fd, response, sizeof(response));
+  if (n <= 0 || strncmp(response, "+OK", 3) != 0) {
     close(fd);
     return -1;
   }
 
-  // Send PSYNC command
+  // PSYNC
   const char *psync_elements[] = {"PSYNC", "?", "-1"};
   char *psync_cmd = createRespArray(psync_elements, 3);
-  printf("Sending PSYNC command\n");
-
   if (writeExactly(fd, psync_cmd, strlen(psync_cmd)) < 0) {
-    printf("Failed to send PSYNC command\n");
     free(psync_cmd);
     close(fd);
     return -1;
   }
   free(psync_cmd);
 
-  master_info->fd = fd;
-  printf("Replication setup completed successfully\n");
+  // Read FULLRESYNC response
+  n = readLine(fd, response, sizeof(response));
+  if (n <= 0 || strncmp(response, "+FULLRESYNC", 11) != 0) {
+    close(fd);
+    return -1;
+  }
 
+  // Read RDB size
+  n = readLine(fd, response, sizeof(response));
+  if (n <= 0 || response[0] != '$') {
+    close(fd);
+    return -1;
+  }
+
+  int rdb_size = atoi(response + 1);
+  char *rdb_data = malloc(rdb_size);
+  int total_read = 0;
+
+  // Read full RDB file
+  while (total_read < rdb_size) {
+    n = read(fd, rdb_data + total_read, rdb_size - total_read);
+    if (n <= 0) {
+      free(rdb_data);
+      close(fd);
+      return -1;
+    }
+    total_read += n;
+  }
+
+  // Store RDB data or process it as needed
+  free(rdb_data);
+
+  master_info->fd = fd;
   return 0;
 }
 
