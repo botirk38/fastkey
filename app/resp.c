@@ -465,3 +465,20 @@ RespValue *cloneRespValue(RespValue *original) {
 
   return clone;
 }
+
+size_t calculateCommandSize(RespValue *command) {
+  size_t size = 0;
+
+  // Array header
+  size += snprintf(NULL, 0, "*%zu\r\n", command->data.array.len);
+
+  // Each element
+  for (size_t i = 0; i < command->data.array.len; i++) {
+    RespValue *elem = command->data.array.elements[i];
+    size += snprintf(NULL, 0, "$%zu\r\n", elem->data.string.len);
+    size += elem->data.string.len;
+    size += 2; // \r\n
+  }
+
+  return size;
+}

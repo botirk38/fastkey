@@ -4,6 +4,7 @@
 #include "event_loop.h"
 #include "networking.h"
 #include "replicas.h"
+#include "resp.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -83,13 +84,18 @@ int handleReplicationCommands(RedisServer *server, int fd) {
       if (parse_result == RESP_OK && command) {
         if (isValidCommand(command)) {
 
-          size_t cmd_bytes = n;
+          size_t cmd_bytes = calculateCommandSize(command);
 
           printf("Command Bytes: %lu\n", cmd_bytes);
 
           processCommand(server, command, fd);
 
+          printf("Previous Repl offset: %llu\n",
+                 server->repl_info->repl_offset);
+
           server->repl_info->repl_offset += cmd_bytes;
+
+          printf(" New Repl offset: %llu\n", server->repl_info->repl_offset);
         }
         freeRespValue(command);
       }

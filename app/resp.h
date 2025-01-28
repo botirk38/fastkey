@@ -122,4 +122,6 @@ char *createFormattedSimpleString(const char *format, ...);
 RespValue *createRespString(const char *str, size_t len);
 RespValue *cloneRespValue(RespValue *original);
 RespValue *parseResponseToRespValue(const char *response);
+
+size_t calculateCommandSize(RespValue *command);
 #endif
