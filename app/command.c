@@ -402,15 +402,18 @@ static const char *handleReplConf(RedisServer *server, RedisStore *store,
   RespValue *subcommand = command->data.array.elements[1];
 
   if (strcasecmp(subcommand->data.string.str, "getack") == 0) {
-    // Create REPLCONF ACK response with offset 0
+    // Create response with current offset
+    char offset_str[32];
+    snprintf(offset_str, sizeof(offset_str), "%lld",
+             server->repl_info->repl_offset);
+
     RespValue *elements[3];
     elements[0] = createRespString("REPLCONF", 8);
     elements[1] = createRespString("ACK", 3);
-    elements[2] = createRespString("0", 1);
+    elements[2] = createRespString(offset_str, strlen(offset_str));
 
     char *response = createRespArrayFromElements(elements, 3);
 
-    // Clean up
     freeRespValue(elements[0]);
     freeRespValue(elements[1]);
     freeRespValue(elements[2]);
@@ -418,8 +421,7 @@ static const char *handleReplConf(RedisServer *server, RedisStore *store,
     return response;
   }
 
-  const char *res = createSimpleString("OK");
-  return res;
+  return createSimpleString("OK");
 }
 
 static const char *handlePsync(RedisServer *server, RedisStore *store,

@@ -52,7 +52,6 @@ static void processCommand(RedisServer *server, RespValue *command, int fd) {
 
 int handleReplicationCommands(RedisServer *server, int fd) {
   printf("[Replication] Starting command processing\n");
-
   RespBuffer *resp_buffer = createRespBuffer();
   if (!resp_buffer) {
     printf("[Error] Failed to create RESP buffer\n");
@@ -61,6 +60,7 @@ int handleReplicationCommands(RedisServer *server, int fd) {
 
   char read_buffer[4096];
   ssize_t n = 0;
+  size_t bytes_processed = 0;
 
   while ((n = recv(fd, read_buffer, sizeof(read_buffer), 0)) > 0) {
     read_buffer[n] = '\0';
@@ -82,17 +82,15 @@ int handleReplicationCommands(RedisServer *server, int fd) {
 
       if (parse_result == RESP_OK && command) {
         if (isValidCommand(command)) {
+          if (!isReplconfGetack(command)) {
+            bytes_processed += n;
+            server->repl_info->repl_offset = bytes_processed;
+          }
           processCommand(server, command, fd);
         }
         freeRespValue(command);
       }
     }
-  }
-
-  if (n == 0) {
-    printf("[Replication] Master connection closed\n");
-  } else if (n < 0) {
-    printf("[Error] Read error from master: %s\n", strerror(errno));
   }
 
   freeRespBuffer(resp_buffer);
