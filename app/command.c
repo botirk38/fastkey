@@ -460,29 +460,46 @@ static const char *handlePsync(RedisServer *server, RedisStore *store,
   return response;
 }
 
-static CommandHandler baseCommands[] = {{"SET", handleSet, 3, 5},
-                                        {"GET", handleGet, 2, 2},
-                                        {"PING", handlePing, 1, 1},
-                                        {"ECHO", handleEcho, 2, 2},
-                                        {"TYPE", handleType, 2, 2},
-                                        {"XADD", handleXadd, 4, -1},
-                                        {"XRANGE", handleXrange, 4, 4},
-                                        {"XREAD", handleXread, 4, -1},
-                                        {"INCR", handleIncrement, 2, 2},
-                                        {"MULTI", handleMulti, 1, 1},
-                                        {"EXEC", handleExec, 1, 1},
-                                        {"DISCARD", handleDiscard, 0, -1},
-                                        {"CONFIG", handleConfigGet, 3, 3},
-                                        {
-                                            "KEYS",
-                                            handleKeys,
-                                            2,
-                                            2,
-                                        },
+static const char *handleWait(RedisServer *server, RedisStore *store,
+                              RespValue *command, ClientState *clientState) {
+  // Get number of connected replicas
+  Replicas *replicas = server->repl_info->replicas;
 
-                                        {"INFO", handleInfo, 1, 2},
-                                        {"REPLCONF", handleReplConf, 3, 3},
-                                        {"PSYNC", handlePsync, 3, 3}};
+  if (replicas) {
+    size_t replica_count = replicas->replica_count;
+    return createInteger(replica_count);
+  }
+
+  // Return replica count as RESP integer
+  return createInteger(-1);
+}
+
+static CommandHandler baseCommands[] = {
+    {"SET", handleSet, 3, 5},
+    {"GET", handleGet, 2, 2},
+    {"PING", handlePing, 1, 1},
+    {"ECHO", handleEcho, 2, 2},
+    {"TYPE", handleType, 2, 2},
+    {"XADD", handleXadd, 4, -1},
+    {"XRANGE", handleXrange, 4, 4},
+    {"XREAD", handleXread, 4, -1},
+    {"INCR", handleIncrement, 2, 2},
+    {"MULTI", handleMulti, 1, 1},
+    {"EXEC", handleExec, 1, 1},
+    {"DISCARD", handleDiscard, 0, -1},
+    {"CONFIG", handleConfigGet, 3, 3},
+    {
+        "KEYS",
+        handleKeys,
+        2,
+        2,
+    },
+
+    {"INFO", handleInfo, 1, 2},
+    {"REPLCONF", handleReplConf, 3, 3},
+    {"PSYNC", handlePsync, 3, 3},
+    {"WAIT", handleWait, 3, 3},
+};
 
 static const size_t commandCount =
     sizeof(baseCommands) / sizeof(CommandHandler);

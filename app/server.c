@@ -82,11 +82,14 @@ int handleReplicationCommands(RedisServer *server, int fd) {
 
       if (parse_result == RESP_OK && command) {
         if (isValidCommand(command)) {
-          if (!isReplconfGetack(command)) {
-            bytes_processed += n;
-            server->repl_info->repl_offset = bytes_processed;
-          }
+
+          size_t cmd_bytes = n;
+
+          printf("Command Bytes: %lu\n", cmd_bytes);
+
           processCommand(server, command, fd);
+
+          server->repl_info->repl_offset += cmd_bytes;
         }
         freeRespValue(command);
       }
