@@ -6,9 +6,61 @@
 #include "resp.h"
 #include "server.h"
 #include "stream.h"
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+
+static WaitState wait_state = {.remaining_count = 0,
+                               .mutex = PTHREAD_MUTEX_INITIALIZER,
+                               .condition = PTHREAD_COND_INITIALIZER,
+                               .acks_received = 0,
+                               .completed = false};
+
+static void *wait_thread(void *arg) {
+  WaitState *state = (WaitState *)arg;
+
+  printf("[WAIT-THREAD] Starting wait thread with timeout %d ms\n",
+         state->timeout_ms);
+
+  pthread_mutex_lock(&state->mutex);
+  printf("Locked mutex\n");
+
+  struct timespec wait_until;
+  clock_gettime(CLOCK_REALTIME, &wait_until);
+
+  // Add 100ms buffer to the timeout
+  int timeout_with_buffer = state->timeout_ms + 100;
+
+  // Calculate timeout properly with buffer
+  wait_until.tv_sec += timeout_with_buffer / 1000;
+  wait_until.tv_nsec += (timeout_with_buffer % 1000) * 1000000L;
+
+  // Handle nanosecond overflow
+  if (wait_until.tv_nsec >= 1000000000L) {
+    wait_until.tv_sec++;
+    wait_until.tv_nsec -= 1000000000L;
+  }
+
+  printf("[WAIT-THREAD] Waiting until %ld.%ld\n", wait_until.tv_sec,
+         wait_until.tv_nsec);
+
+  while (!state->completed && state->acks_received < state->remaining_count) {
+    int result =
+        pthread_cond_timedwait(&state->condition, &state->mutex, &wait_until);
+    if (result == ETIMEDOUT) {
+      printf("[WAIT-THREAD] Timeout reached\n");
+      break;
+    }
+  }
+
+  state->completed = true;
+  pthread_mutex_unlock(&state->mutex);
+  printf("[WAIT-THREAD] Thread completed\n");
+
+  return NULL;
+}
 
 static const char *handleSet(RedisServer *server, RedisStore *store,
                              RespValue *command, ClientState *clientState) {
@@ -401,7 +453,13 @@ static const char *handleReplConf(RedisServer *server, RedisStore *store,
                                   ClientState *clientState) {
   RespValue *subcommand = command->data.array.elements[1];
 
+  printf("handleReplConf called with subcommand: %s\n",
+         subcommand->data.string.str);
+
   if (strcasecmp(subcommand->data.string.str, "getack") == 0) {
+    printf("Processing GETACK command, current offset: %lld\n",
+           server->repl_info->repl_offset);
+
     // Create response with current offset
     char offset_str[32];
     snprintf(offset_str, sizeof(offset_str), "%lld",
@@ -412,6 +470,8 @@ static const char *handleReplConf(RedisServer *server, RedisStore *store,
     elements[1] = createRespString("ACK", 3);
     elements[2] = createRespString(offset_str, strlen(offset_str));
 
+    printf("Creating GETACK response with offset: %s\n", offset_str);
+
     char *response = createRespArrayFromElements(elements, 3);
 
     freeRespValue(elements[0]);
@@ -419,8 +479,27 @@ static const char *handleReplConf(RedisServer *server, RedisStore *store,
     freeRespValue(elements[2]);
 
     return response;
+
+  } else if (strcasecmp(subcommand->data.string.str, "ack") == 0) {
+    printf("Processing ACK command\n");
+
+    pthread_mutex_lock(&wait_state.mutex);
+    printf("Current remaining count: %ld\n", wait_state.remaining_count);
+
+    printf("Wait State not completed\n");
+    wait_state.acks_received++;
+    wait_state.remaining_count--;
+    printf("Incremented acks received to: %zu\n", wait_state.acks_received);
+
+    if (wait_state.acks_received >= wait_state.remaining_count) {
+      printf("Required ACKs received, signaling condition\n");
+      pthread_cond_signal(&wait_state.condition);
+    }
+    pthread_mutex_unlock(&wait_state.mutex);
+    return NULL;
   }
 
+  printf("Returning OK response\n");
   return createSimpleString("OK");
 }
 
@@ -462,16 +541,57 @@ static const char *handlePsync(RedisServer *server, RedisStore *store,
 
 static const char *handleWait(RedisServer *server, RedisStore *store,
                               RespValue *command, ClientState *clientState) {
-  // Get number of connected replicas
-  Replicas *replicas = server->repl_info->replicas;
+  printf("[WAIT] Starting WAIT command execution\n");
 
-  if (replicas) {
-    size_t replica_count = replicas->replica_count;
-    return createInteger(replica_count);
+  size_t numreplicas = atoll(command->data.array.elements[1]->data.string.str);
+  int timeout = atoll(command->data.array.elements[2]->data.string.str);
+
+  printf("[WAIT] Requested wait for %zu replicas with timeout %d\n",
+         numreplicas, timeout);
+
+  if (!server->repl_info->master_info && server->repl_info->repl_offset == 0) {
+    return createInteger(server->repl_info->replicas->replica_count);
   }
 
-  // Return replica count as RESP integer
-  return createInteger(-1);
+  // Send REPLCONF GETACK to all replicas
+  for (size_t i = 0; i < server->repl_info->replicas->replica_count; i++) {
+    RespValue *getack_elements[3];
+    getack_elements[0] = createRespString("REPLCONF", 8);
+    getack_elements[1] = createRespString("GETACK", 6);
+    getack_elements[2] = createRespString("*", 1);
+
+    char *getack_cmd = createRespArrayFromElements(getack_elements, 3);
+    int fd = server->repl_info->replicas->replicas[i].fd;
+
+    write(fd, getack_cmd, strlen(getack_cmd));
+
+    for (int j = 0; j < 3; j++) {
+      freeRespValue(getack_elements[j]);
+    }
+    free(getack_cmd);
+  }
+
+  pthread_mutex_lock(&wait_state.mutex);
+  wait_state.remaining_count = numreplicas;
+  wait_state.completed = false;
+  wait_state.acks_received = 0;
+  wait_state.timeout_ms = timeout;
+  pthread_mutex_unlock(&wait_state.mutex);
+
+  pthread_t thread_id;
+  pthread_create(&thread_id, NULL, wait_thread, &wait_state);
+
+  pthread_join(thread_id, NULL);
+
+  // Get final acks count
+
+  pthread_mutex_lock(&wait_state.mutex);
+  size_t acked = wait_state.acks_received;
+  pthread_mutex_unlock(&wait_state.mutex);
+
+  printf("Acked %lu\n,", acked);
+
+  return createInteger(acked);
 }
 
 static CommandHandler baseCommands[] = {
@@ -553,6 +673,7 @@ const char *executeCommand(RedisServer *server, RedisStore *store,
       strcasecmp(cmdName->data.string.str, "DEL") == 0 ||
       strcasecmp(cmdName->data.string.str, "INCR") == 0 ||
       strcasecmp(cmdName->data.string.str, "XADD") == 0) {
+    printf("Propagating Command %s\n", cmdName->data.string.str);
     propagateCommand(server, command);
   }
 

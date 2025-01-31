@@ -43,7 +43,10 @@ void handleClientCommand(RedisServer *server, int fd, RespValue *command,
   const char *response =
       executeCommand(server, server->db, command, clientState);
 
-  sendReply(server, fd, response);
+  if (response) {
+
+    sendReply(server, fd, response);
+  }
 }
 
 void handleClientData(EventLoop *loop, RedisServer *server, int fd) {

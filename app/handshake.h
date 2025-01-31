@@ -12,7 +12,12 @@ typedef struct {
 } MasterInfo;
 
 typedef struct {
-  int *replica_fds;
+  int fd;
+  long long ack_offset;
+} Replica;
+
+typedef struct {
+  Replica *replicas; // Array of Replica structs
   size_t replica_count;
   size_t replica_capacity;
 } Replicas;

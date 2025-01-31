@@ -213,6 +213,7 @@ void freeServer(RedisServer *server) {
     } else {
       freeReplicas(server);
     }
+    free(server->repl_info->replication_id);
     free(server->repl_info);
   }
 

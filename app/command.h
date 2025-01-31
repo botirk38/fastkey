@@ -18,6 +18,15 @@ typedef struct CommandTable {
   size_t count;
 } CommandTable;
 
+typedef struct {
+  size_t remaining_count;
+  pthread_mutex_t mutex;
+  pthread_cond_t condition;
+  size_t acks_received;
+  bool completed;
+  int timeout_ms;
+} WaitState;
+
 const char *executeCommand(RedisServer *server, RedisStore *store,
                            RespValue *command, ClientState *client_state);
 
