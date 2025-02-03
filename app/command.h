@@ -1,7 +1,7 @@
 #ifndef COMMAND_H
 #define COMMAND_H
 
-#include "event_loop.h"
+#include "client_handler.h"
 #include "redis_store.h"
 #include "server.h"
 

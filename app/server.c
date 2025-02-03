@@ -1,7 +1,6 @@
 #include "server.h"
 #include "command.h"
 #include "config.h"
-#include "event_loop.h"
 #include "networking.h"
 #include "replicas.h"
 #include "resp.h"

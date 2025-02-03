@@ -1,12 +1,10 @@
 #include "command.h"
-#include "event_loop.h"
 #include "rdb.h"
 #include "redis_store.h"
 #include "replicas.h"
 #include "resp.h"
 #include "server.h"
 #include "stream.h"
-#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,50 +15,6 @@ static WaitState wait_state = {.remaining_count = 0,
                                .condition = PTHREAD_COND_INITIALIZER,
                                .acks_received = 0,
                                .completed = false};
-
-static void *wait_thread(void *arg) {
-  WaitState *state = (WaitState *)arg;
-
-  printf("[WAIT-THREAD] Starting wait thread with timeout %d ms\n",
-         state->timeout_ms);
-
-  pthread_mutex_lock(&state->mutex);
-  printf("Locked mutex\n");
-
-  struct timespec wait_until;
-  clock_gettime(CLOCK_REALTIME, &wait_until);
-
-  // Add 100ms buffer to the timeout
-  int timeout_with_buffer = state->timeout_ms + 100;
-
-  // Calculate timeout properly with buffer
-  wait_until.tv_sec += timeout_with_buffer / 1000;
-  wait_until.tv_nsec += (timeout_with_buffer % 1000) * 1000000L;
-
-  // Handle nanosecond overflow
-  if (wait_until.tv_nsec >= 1000000000L) {
-    wait_until.tv_sec++;
-    wait_until.tv_nsec -= 1000000000L;
-  }
-
-  printf("[WAIT-THREAD] Waiting until %ld.%ld\n", wait_until.tv_sec,
-         wait_until.tv_nsec);
-
-  while (!state->completed && state->acks_received < state->remaining_count) {
-    int result =
-        pthread_cond_timedwait(&state->condition, &state->mutex, &wait_until);
-    if (result == ETIMEDOUT) {
-      printf("[WAIT-THREAD] Timeout reached\n");
-      break;
-    }
-  }
-
-  state->completed = true;
-  pthread_mutex_unlock(&state->mutex);
-  printf("[WAIT-THREAD] Thread completed\n");
-
-  return NULL;
-}
 
 static const char *handleSet(RedisServer *server, RedisStore *store,
                              RespValue *command, ClientState *clientState) {
@@ -544,10 +498,10 @@ static const char *handleWait(RedisServer *server, RedisStore *store,
   printf("[WAIT] Starting WAIT command execution\n");
 
   size_t numreplicas = atoll(command->data.array.elements[1]->data.string.str);
-  int timeout = atoll(command->data.array.elements[2]->data.string.str);
+  int timeout_ms = atoll(command->data.array.elements[2]->data.string.str);
 
   printf("[WAIT] Requested wait for %zu replicas with timeout %d\n",
-         numreplicas, timeout);
+         numreplicas, timeout_ms);
 
   if (!server->repl_info->master_info && server->repl_info->repl_offset == 0) {
     return createInteger(server->repl_info->replicas->replica_count);
@@ -562,7 +516,6 @@ static const char *handleWait(RedisServer *server, RedisStore *store,
 
     char *getack_cmd = createRespArrayFromElements(getack_elements, 3);
     int fd = server->repl_info->replicas->replicas[i].fd;
-
     write(fd, getack_cmd, strlen(getack_cmd));
 
     for (int j = 0; j < 3; j++) {
@@ -575,22 +528,43 @@ static const char *handleWait(RedisServer *server, RedisStore *store,
   wait_state.remaining_count = numreplicas;
   wait_state.completed = false;
   wait_state.acks_received = 0;
-  wait_state.timeout_ms = timeout;
-  pthread_mutex_unlock(&wait_state.mutex);
 
-  pthread_t thread_id;
-  pthread_create(&thread_id, NULL, wait_thread, &wait_state);
+  // Get start time
+  struct timespec start_time;
+  clock_gettime(CLOCK_MONOTONIC, &start_time);
 
-  pthread_join(thread_id, NULL);
+  struct timespec wait_until;
+  clock_gettime(CLOCK_REALTIME, &wait_until);
+  wait_until.tv_sec += timeout_ms / 1000;
+  wait_until.tv_nsec += (timeout_ms % 1000) * 1000000L;
 
-  // Get final acks count
+  if (wait_until.tv_nsec >= 1000000000L) {
+    wait_until.tv_sec++;
+    wait_until.tv_nsec -= 1000000000L;
+  }
 
-  pthread_mutex_lock(&wait_state.mutex);
+  // Wait for the full timeout
+  pthread_cond_timedwait(&wait_state.condition, &wait_state.mutex, &wait_until);
+
+  // Calculate remaining time if any
+  struct timespec current_time;
+  clock_gettime(CLOCK_MONOTONIC, &current_time);
+  long elapsed_ms = (current_time.tv_sec - start_time.tv_sec) * 1000 +
+                    (current_time.tv_nsec - start_time.tv_nsec) / 1000000;
+
+  if (elapsed_ms < timeout_ms) {
+    struct timespec remaining;
+    remaining.tv_sec = (timeout_ms - elapsed_ms) / 1000;
+    remaining.tv_nsec = ((timeout_ms - elapsed_ms) % 1000) * 1000000L;
+    nanosleep(&remaining, NULL);
+  }
+
   size_t acked = wait_state.acks_received;
+  wait_state.completed = true;
+
   pthread_mutex_unlock(&wait_state.mutex);
 
-  printf("Acked %lu\n,", acked);
-
+  printf("Acked %lu\n", acked);
   return createInteger(acked);
 }
 
