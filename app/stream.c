@@ -347,4 +347,12 @@ StreamInfo *recheckStreams(Stream **streams, const char **keys,
   return streamInfos;
 }
 
+bool waitForStreamDataInfinite(StreamBlockState *state) {
+  pthread_mutex_lock(&state->mutex);
+  state->has_new_data = false;
+  pthread_cond_wait(&state->condition, &state->mutex);
+  pthread_mutex_unlock(&state->mutex);
+  return true;
+}
+
 StreamBlockState *getStreamBlockState(void) { return &stream_block_state; }

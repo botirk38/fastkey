@@ -62,4 +62,5 @@ bool waitForStreamData(StreamBlockState *state, int timeoutMs);
 StreamInfo *recheckStreams(Stream **streams, const char **keys,
                            const char **ids, size_t numStreams);
 StreamBlockState *getStreamBlockState(void);
+bool waitForStreamDataInfinite(StreamBlockState *state);
 #endif

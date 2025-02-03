@@ -209,17 +209,25 @@ static const char *handleXread(RedisServer *server, RedisStore *store,
       processStreamReads(streams, keys, ids, numStreams, &hasData);
 
   // Handle blocking if needed
-  if (blocking && !hasData && blockMs > 0) {
-    if (!waitForStreamData(getStreamBlockState(), blockMs)) {
+  if (blocking && !hasData) {
+
+    bool gotData;
+    if (blockMs == 0) {
+      gotData = waitForStreamDataInfinite(getStreamBlockState());
+    } else {
+      gotData = waitForStreamData(getStreamBlockState(), blockMs);
+    }
+
+    if (gotData) {
+      freeStreamInfo(streamInfos, numStreams);
+      streamInfos = recheckStreams(streams, keys, ids, numStreams);
+    } else {
       freeStreamInfo(streamInfos, numStreams);
       free(streams);
       free(keys);
       free(ids);
       return createNullBulkString();
     }
-
-    freeStreamInfo(streamInfos, numStreams);
-    streamInfos = recheckStreams(streams, keys, ids, numStreams);
   }
 
   // Create response
