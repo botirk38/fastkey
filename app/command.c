@@ -203,6 +203,23 @@ static const char *handleXread(RedisServer *server, RedisStore *store,
     streams[i] = storeGetStream(store, keys[i]);
   }
 
+  for (size_t i = 0; i < numStreams; i++) {
+    keys[i] = command->data.array.elements[streamsPos + 1 + i]->data.string.str;
+    const char *rawId =
+        command->data.array.elements[streamsPos + 1 + numStreams + i]
+            ->data.string.str;
+
+    streams[i] = storeGetStream(store, keys[i]);
+
+    // Replace $ with latest stream ID using strncmp
+    if (strncmp(rawId, "$", 1) == 0) {
+      StreamEntry *lastEntry = streams[i]->tail;
+      ids[i] = lastEntry ? strdup(lastEntry->id) : strdup("0-0");
+    } else {
+      ids[i] = strdup(rawId);
+    }
+  }
+
   // Process initial read
   bool hasData = false;
   StreamInfo *streamInfos =
