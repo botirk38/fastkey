@@ -40,12 +40,6 @@ typedef struct RespValue {
   } data;
 } RespValue;
 
-typedef struct {
-  const char *key;
-  StreamEntry *entries;
-  size_t count;
-} StreamInfo;
-
 /**
  * Buffer for accumulating and parsing RESP data
  */

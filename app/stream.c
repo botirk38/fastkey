@@ -1,8 +1,14 @@
 #include "stream.h"
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/time.h>
+
+static StreamBlockState stream_block_state = {
+    .mutex = PTHREAD_MUTEX_INITIALIZER,
+    .condition = PTHREAD_COND_INITIALIZER,
+    .has_new_data = false};
 
 static uint64_t getCurrentTimeMs() {
   struct timeval tv;
@@ -83,7 +89,7 @@ uint64_t getNextSequence(Stream *stream, uint64_t ms) {
 
 char *generateStreamID(uint64_t ms, uint64_t seq) {
   char *id = malloc(32);
-  snprintf(id, 32, "%llu-%llu", ms, seq);
+  snprintf(id, 32, "%lu-%lu", ms, seq);
   return id;
 }
 
@@ -149,6 +155,11 @@ char *streamAdd(Stream *stream, const char *id, char **fields, char **values,
     stream->tail->next = entry;
   }
   stream->tail = entry;
+
+  pthread_mutex_lock(&stream_block_state.mutex);
+  stream_block_state.has_new_data = true;
+  pthread_cond_broadcast(&stream_block_state.condition);
+  pthread_mutex_unlock(&stream_block_state.mutex);
 
   return strdup(finalId);
 }
@@ -268,3 +279,72 @@ void freeStreamEntry(StreamEntry *entry) {
   free(entry->values);
   free(entry);
 }
+
+StreamInfo *processStreamReads(Stream **streams, const char **keys,
+                               const char **ids, size_t numStreams,
+                               bool *hasData) {
+  StreamInfo *streamInfos = malloc(numStreams * sizeof(StreamInfo));
+  *hasData = false;
+
+  for (size_t i = 0; i < numStreams; i++) {
+    streamInfos[i].key = strdup(keys[i]);
+    if (streams[i]) {
+      streamInfos[i].entries =
+          streamRead(streams[i], ids[i], &streamInfos[i].count);
+      if (streamInfos[i].count > 0) {
+        *hasData = true;
+      }
+    } else {
+      streamInfos[i].entries = NULL;
+      streamInfos[i].count = 0;
+    }
+  }
+  return streamInfos;
+}
+
+void freeStreamInfo(StreamInfo *streams, size_t numStreams) {
+  for (size_t i = 0; i < numStreams; i++) {
+    free((void *)streams[i].key);
+    StreamEntry *current = streams[i].entries;
+    while (current) {
+      StreamEntry *next = current->next;
+      freeStreamEntry(current);
+      current = next;
+    }
+  }
+  free(streams);
+}
+
+bool waitForStreamData(StreamBlockState *state, int timeoutMs) {
+  struct timespec timeout;
+  clock_gettime(CLOCK_REALTIME, &timeout);
+  timeout.tv_sec += timeoutMs / 1000;
+  timeout.tv_nsec += (timeoutMs % 1000) * 1000000;
+
+  pthread_mutex_lock(&state->mutex);
+  state->has_new_data = false;
+  int result =
+      pthread_cond_timedwait(&state->condition, &state->mutex, &timeout);
+  pthread_mutex_unlock(&state->mutex);
+
+  return result != ETIMEDOUT;
+}
+
+StreamInfo *recheckStreams(Stream **streams, const char **keys,
+                           const char **ids, size_t numStreams) {
+  StreamInfo *streamInfos = malloc(numStreams * sizeof(StreamInfo));
+
+  for (size_t i = 0; i < numStreams; i++) {
+    streamInfos[i].key = strdup(keys[i]);
+    if (streams[i]) {
+      streamInfos[i].entries =
+          streamRead(streams[i], ids[i], &streamInfos[i].count);
+    } else {
+      streamInfos[i].entries = NULL;
+      streamInfos[i].count = 0;
+    }
+  }
+  return streamInfos;
+}
+
+StreamBlockState *getStreamBlockState(void) { return &stream_block_state; }

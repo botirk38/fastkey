@@ -133,6 +133,7 @@ static const char *handleXadd(RedisServer *server, RedisStore *store,
 
   char *response = createBulkString(result, strlen(result));
   free(result);
+
   return response;
 }
 
@@ -167,13 +168,21 @@ static const char *handleXrange(RedisServer *server, RedisStore *store,
 static const char *handleXread(RedisServer *server, RedisStore *store,
                                RespValue *command, ClientState *clientState) {
   int streamsPos = -1;
+  int blockMs = 0;
+  bool blocking = false;
 
-  // Find STREAMS argument position
+  // Parse STREAMS and BLOCK arguments
   for (size_t i = 1; i < command->data.array.len; i++) {
     if (strcasecmp(command->data.array.elements[i]->data.string.str,
                    "STREAMS") == 0) {
       streamsPos = i;
-      break;
+    } else if (strcasecmp(command->data.array.elements[i]->data.string.str,
+                          "BLOCK") == 0) {
+      if (i + 1 < command->data.array.len) {
+        blocking = true;
+        blockMs = atoi(command->data.array.elements[i + 1]->data.string.str);
+        i++;
+      }
     }
   }
 
@@ -181,44 +190,46 @@ static const char *handleXread(RedisServer *server, RedisStore *store,
     return createError("ERR syntax error");
   }
 
-  // Calculate number of streams
+  // Setup stream arrays
   size_t numStreams = (command->data.array.len - streamsPos - 1) / 2;
+  Stream **streams = malloc(numStreams * sizeof(Stream *));
+  const char **keys = malloc(numStreams * sizeof(char *));
+  const char **ids = malloc(numStreams * sizeof(char *));
 
-  // Create array of StreamInfo structs
-  StreamInfo *streams = malloc(numStreams * sizeof(StreamInfo));
-
-  // Process each stream
   for (size_t i = 0; i < numStreams; i++) {
-    RespValue *key = command->data.array.elements[streamsPos + 1 + i];
-    RespValue *id =
-        command->data.array.elements[streamsPos + 1 + numStreams + i];
+    keys[i] = command->data.array.elements[streamsPos + 1 + i]->data.string.str;
+    ids[i] = command->data.array.elements[streamsPos + 1 + numStreams + i]
+                 ->data.string.str;
+    streams[i] = storeGetStream(store, keys[i]);
+  }
 
-    streams[i].key = key->data.string.str;
-    Stream *stream = storeGetStream(store, key->data.string.str);
+  // Process initial read
+  bool hasData = false;
+  StreamInfo *streamInfos =
+      processStreamReads(streams, keys, ids, numStreams, &hasData);
 
-    if (!stream) {
-      streams[i].entries = NULL;
-      streams[i].count = 0;
-      continue;
+  // Handle blocking if needed
+  if (blocking && !hasData && blockMs > 0) {
+    if (!waitForStreamData(getStreamBlockState(), blockMs)) {
+      freeStreamInfo(streamInfos, numStreams);
+      free(streams);
+      free(keys);
+      free(ids);
+      return createNullBulkString();
     }
 
-    streams[i].entries =
-        streamRead(stream, id->data.string.str, &streams[i].count);
+    freeStreamInfo(streamInfos, numStreams);
+    streamInfos = recheckStreams(streams, keys, ids, numStreams);
   }
 
   // Create response
-  char *response = createXreadResponse(streams, numStreams);
+  char *response = createXreadResponse(streamInfos, numStreams);
 
-  // Clean up
-  for (size_t i = 0; i < numStreams; i++) {
-    StreamEntry *current = streams[i].entries;
-    while (current) {
-      StreamEntry *next = current->next;
-      freeStreamEntry(current);
-      current = next;
-    }
-  }
+  // Cleanup
+  freeStreamInfo(streamInfos, numStreams);
   free(streams);
+  free(keys);
+  free(ids);
 
   return response;
 }
