@@ -261,6 +261,13 @@ time_t getCurrentTimeMs(void) {
   return ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 }
 
+size_t storeSize(RedisStore *store) {
+  if (!store) {
+    return 0;
+  }
+  return store->used;
+}
+
 void freeStore(RedisStore *store) {
   if (!store) {
     return;

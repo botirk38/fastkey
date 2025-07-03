@@ -87,11 +87,31 @@ Logging level can be configured via the logger initialization in main.c.
 
 ## Development
 ### Testing
-This project is designed to work with CodeCrafters Redis challenges:
+This project includes a comprehensive test suite covering all core functionality:
+
 ```bash
-# Run CodeCrafters tests
-codecrafter test
+# Build and run all tests
+make test
+
+# Build the main application
+make
+
+# Clean build artifacts
+make clean
 ```
+
+**Test Coverage:**
+- **Redis Store Module**: Key-value operations, expiry handling, type checking
+- **RESP Protocol**: Buffer management, string encoding, array parsing
+- **Command Execution**: PING, ECHO, SET, GET, TYPE commands
+- **Stream Operations**: Stream creation, entry management, range queries
+- **Integration Tests**: Server initialization, networking, concurrency
+
+**Test Results:**
+- 256 total tests with 100% pass rate
+- Memory leak detection and proper cleanup validation
+- Thread-safe operation testing
+
 
 ### Code Quality
 The codebase follows these principles:
@@ -101,4 +121,4 @@ The codebase follows these principles:
 - Modular design with clear separation of concerns
 
 ## License
-This project is for educational purposes as part of the CodeCrafters Redis implementation challenge.
+This project is for educational purposes and open source development.

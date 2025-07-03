@@ -268,7 +268,7 @@ int parseLine(const char *data, size_t len, size_t *lineLen, char **line) {
 
 RespValue *createRespString(const char *str, size_t len) {
   RespValue *value = malloc(sizeof(RespValue));
-  value->type = RespTypeString;
+  value->type = RespTypeBulk;
   value->data.string.str = malloc(len + 1);
   memcpy(value->data.string.str, str, len);
   value->data.string.str[len] = '\0';
