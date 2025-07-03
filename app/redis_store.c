@@ -2,6 +2,7 @@
 #include "stream.h"
 #include <stdlib.h>
 #include <string.h>
+#include <pthread.h>
 
 #define LOAD_FACTOR_THRESHOLD 0.75
 
@@ -16,9 +17,21 @@ static uint64_t hash(const char *key) {
 
 RedisStore *createStore(void) {
   RedisStore *store = malloc(sizeof(RedisStore));
+  if (!store) {
+    return NULL;
+  }
   store->size = INITIAL_STORE_SIZE;
   store->used = 0;
   store->table = calloc(store->size, sizeof(StoreEntry *));
+  if (!store->table) {
+    free(store);
+    return NULL;
+  }
+  if (pthread_rwlock_init(&store->rwlock, NULL) != 0) {
+    free(store->table);
+    free(store);
+    return NULL;
+  }
   return store;
 }
 
@@ -53,6 +66,12 @@ static void resize(RedisStore *store) {
 }
 
 int storeSet(RedisStore *store, const char *key, void *value, size_t valueLen) {
+  if (!store || !key || !value) {
+    return STORE_ERR;
+  }
+
+  pthread_rwlock_wrlock(&store->rwlock);
+
   if ((float)store->used / store->size > LOAD_FACTOR_THRESHOLD) {
     resize(store);
   }
@@ -69,17 +88,37 @@ int storeSet(RedisStore *store, const char *key, void *value, size_t valueLen) {
       }
       entry->type = TYPE_STRING;
       entry->value.string.data = malloc(valueLen);
+      if (!entry->value.string.data) {
+        pthread_rwlock_unlock(&store->rwlock);
+        return STORE_ERR;
+      }
       memcpy(entry->value.string.data, value, valueLen);
       entry->value.string.len = valueLen;
+      pthread_rwlock_unlock(&store->rwlock);
       return STORE_OK;
     }
     entry = entry->next;
   }
 
   entry = malloc(sizeof(StoreEntry));
+  if (!entry) {
+    pthread_rwlock_unlock(&store->rwlock);
+    return STORE_ERR;
+  }
   entry->key = strdup(key);
+  if (!entry->key) {
+    free(entry);
+    pthread_rwlock_unlock(&store->rwlock);
+    return STORE_ERR;
+  }
   entry->type = TYPE_STRING;
   entry->value.string.data = malloc(valueLen);
+  if (!entry->value.string.data) {
+    free(entry->key);
+    free(entry);
+    pthread_rwlock_unlock(&store->rwlock);
+    return STORE_ERR;
+  }
   memcpy(entry->value.string.data, value, valueLen);
   entry->value.string.len = valueLen;
   entry->expiry = 0;
@@ -87,28 +126,43 @@ int storeSet(RedisStore *store, const char *key, void *value, size_t valueLen) {
   store->table[hashVal] = entry;
   store->used++;
 
+  pthread_rwlock_unlock(&store->rwlock);
   return STORE_OK;
 }
 
 void *storeGet(RedisStore *store, const char *key, size_t *valueLen) {
+  if (!store || !key || !valueLen) {
+    return NULL;
+  }
+
+  pthread_rwlock_rdlock(&store->rwlock);
+
   uint64_t hashVal = hash(key) % store->size;
   StoreEntry *entry = store->table[hashVal];
 
   while (entry) {
     if (strcmp(entry->key, key) == 0) {
       if (entry->expiry && entry->expiry <= getCurrentTimeMs()) {
+        pthread_rwlock_unlock(&store->rwlock);
         return NULL;
       }
       if (entry->type != TYPE_STRING) {
+        pthread_rwlock_unlock(&store->rwlock);
         return NULL;
       }
       void *value = malloc(entry->value.string.len);
+      if (!value) {
+        pthread_rwlock_unlock(&store->rwlock);
+        return NULL;
+      }
       memcpy(value, entry->value.string.data, entry->value.string.len);
       *valueLen = entry->value.string.len;
+      pthread_rwlock_unlock(&store->rwlock);
       return value;
     }
     entry = entry->next;
   }
+  pthread_rwlock_unlock(&store->rwlock);
   return NULL;
 }
 
@@ -208,6 +262,10 @@ time_t getCurrentTimeMs(void) {
 }
 
 void freeStore(RedisStore *store) {
+  if (!store) {
+    return;
+  }
+  
   for (size_t i = 0; i < store->size; i++) {
     StoreEntry *entry = store->table[i];
     while (entry) {
@@ -217,5 +275,6 @@ void freeStore(RedisStore *store) {
     }
   }
   free(store->table);
+  pthread_rwlock_destroy(&store->rwlock);
   free(store);
 }

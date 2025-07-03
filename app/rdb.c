@@ -180,11 +180,11 @@ char *getRdbValue(RdbReader *reader, const char *targetKey, size_t *valueLen) {
     uint64_t expiry = 0;
     if (type == RDB_EXPIRE_MS) {
       expiry = readUint64(reader);
-      printf("[RDB] Found millisecond expiry: %llu\n", expiry);
+      printf("[RDB] Found millisecond expiry: %lu\n", expiry);
       type = readByte(reader);
     } else if (type == RDB_EXPIRE_SEC) {
       expiry = readUint32(reader) * 1000;
-      printf("[RDB] Found second expiry: %llu\n", expiry);
+      printf("[RDB] Found second expiry: %lu\n", expiry);
       type = readByte(reader);
     }
 
@@ -207,10 +207,10 @@ char *getRdbValue(RdbReader *reader, const char *targetKey, size_t *valueLen) {
 
       if (keyMatch) {
         time_t now = getCurrentTimeMs();
-        printf("[RDB] Expiry %llu\n", expiry);
+        printf("[RDB] Expiry %lu\n", expiry);
         printf("[RDB] Now %lu\n", now);
         if (expiry > 0 && now >= expiry) {
-          printf("[RDB] Key expired at %llu, current time %lu\n", expiry, now);
+          printf("[RDB] Key expired at %lu, current time %lu\n", expiry, now);
           free(value);
           return NULL;
         }

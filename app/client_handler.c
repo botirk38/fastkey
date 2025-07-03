@@ -29,8 +29,21 @@ ClientState *handleNewClient(RedisServer *server, int clientFd) {
 
   client->fd = clientFd;
   client->buffer = createRespBuffer();
+  if (!client->buffer) {
+    LOG_ERROR("Failed to create RESP buffer for client (fd: %d)", clientFd);
+    free(client);
+    close(clientFd);
+    return NULL;
+  }
   client->in_transaction = 0;
   client->queue = createCommandQueue();
+  if (!client->queue) {
+    LOG_ERROR("Failed to create command queue for client (fd: %d)", clientFd);
+    freeRespBuffer(client->buffer);
+    free(client);
+    close(clientFd);
+    return NULL;
+  }
 
   LOG_INFO("New client connected successfully (fd: %d, transaction: %d)",
            clientFd, client->in_transaction);
@@ -93,6 +106,20 @@ void handleClientData(RedisServer *server, ClientState *client) {
   }
 }
 
+void freeClientState(ClientState *client) {
+  if (!client) {
+    return;
+  }
+  if (client->buffer) {
+    freeRespBuffer(client->buffer);
+  }
+  if (client->queue) {
+    freeCommandQueue(client->queue);
+  }
+  close(client->fd);
+  free(client);
+}
+
 void handleClientConnection(void *arg) {
   ClientHandlerArg *client_arg = (ClientHandlerArg *)arg;
   LOG_DEBUG("Initializing client handler thread (fd: %d, server_port: %d)",
@@ -104,6 +131,7 @@ void handleClientConnection(void *arg) {
   if (client) {
     LOG_INFO("Starting client data handling (fd: %d)", client_arg->clientFd);
     handleClientData(client_arg->server, client);
+    freeClientState(client);
   } else {
     LOG_WARN("Failed to initialize client state (fd: %d)",
              client_arg->clientFd);

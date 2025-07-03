@@ -30,6 +30,7 @@ typedef struct RedisStore {
   StoreEntry **table;
   size_t size;
   size_t used;
+  pthread_rwlock_t rwlock;
 } RedisStore;
 
 // Core operations

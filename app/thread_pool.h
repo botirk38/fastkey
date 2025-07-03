@@ -21,7 +21,7 @@ typedef struct {
 } ThreadPool;
 
 ThreadPool *createThreadPool(int num_threads);
-void threadPoolAdd(ThreadPool *pool, void (*task)(void *), void *arg);
+int threadPoolAdd(ThreadPool *pool, void (*task)(void *), void *arg);
 void threadPoolDestroy(ThreadPool *pool);
 
 #endif

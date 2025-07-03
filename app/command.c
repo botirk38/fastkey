@@ -165,96 +165,140 @@ static const char *handleXrange(RedisServer *server, RedisStore *store,
   return response;
 }
 
-static const char *handleXread(RedisServer *server, RedisStore *store,
-                               RespValue *command, ClientState *clientState) {
-  int streamsPos = -1;
-  int blockMs = 0;
-  bool blocking = false;
+typedef struct XreadArgs {
+  int streamsPos;
+  int blockMs;
+  bool blocking;
+  size_t numStreams;
+  Stream **streams;
+  const char **keys;
+  const char **ids;
+} XreadArgs;
+
+static int parseXreadArgs(RespValue *command, XreadArgs *args) {
+  args->streamsPos = -1;
+  args->blockMs = 0;
+  args->blocking = false;
 
   // Parse STREAMS and BLOCK arguments
   for (size_t i = 1; i < command->data.array.len; i++) {
     if (strcasecmp(command->data.array.elements[i]->data.string.str,
                    "STREAMS") == 0) {
-      streamsPos = i;
+      args->streamsPos = i;
     } else if (strcasecmp(command->data.array.elements[i]->data.string.str,
                           "BLOCK") == 0) {
       if (i + 1 < command->data.array.len) {
-        blocking = true;
-        blockMs = atoi(command->data.array.elements[i + 1]->data.string.str);
+        args->blocking = true;
+        args->blockMs = atoi(command->data.array.elements[i + 1]->data.string.str);
         i++;
       }
     }
   }
 
-  if (streamsPos == -1) {
+  if (args->streamsPos == -1) {
+    return -1;
+  }
+
+  args->numStreams = (command->data.array.len - args->streamsPos - 1) / 2;
+  return 0;
+}
+
+static int setupXreadStreams(RedisStore *store, RespValue *command, XreadArgs *args) {
+  args->streams = malloc(args->numStreams * sizeof(Stream *));
+  args->keys = malloc(args->numStreams * sizeof(char *));
+  args->ids = malloc(args->numStreams * sizeof(char *));
+
+  if (!args->streams || !args->keys || !args->ids) {
+    free(args->streams);
+    free(args->keys);
+    free(args->ids);
+    return -1;
+  }
+
+  for (size_t i = 0; i < args->numStreams; i++) {
+    args->keys[i] = command->data.array.elements[args->streamsPos + 1 + i]->data.string.str;
+    const char *rawId = command->data.array.elements[args->streamsPos + 1 + args->numStreams + i]->data.string.str;
+    args->streams[i] = storeGetStream(store, args->keys[i]);
+
+    // Replace $ with latest stream ID
+    if (strncmp(rawId, "$", 1) == 0) {
+      StreamEntry *lastEntry = args->streams[i] ? args->streams[i]->tail : NULL;
+      args->ids[i] = lastEntry ? strdup(lastEntry->id) : strdup("0-0");
+    } else {
+      args->ids[i] = strdup(rawId);
+    }
+    
+    if (!args->ids[i]) {
+      // Cleanup on allocation failure
+      for (size_t j = 0; j < i; j++) {
+        free((void*)args->ids[j]);
+      }
+      free(args->streams);
+      free(args->keys);
+      free(args->ids);
+      return -1;
+    }
+  }
+
+  return 0;
+}
+
+static void freeXreadArgs(XreadArgs *args) {
+  if (args->streams) {
+    free(args->streams);
+  }
+  if (args->keys) {
+    free(args->keys);
+  }
+  if (args->ids) {
+    for (size_t i = 0; i < args->numStreams; i++) {
+      free((void*)args->ids[i]);
+    }
+    free(args->ids);
+  }
+}
+
+static const char *handleXread(RedisServer *server, RedisStore *store,
+                               RespValue *command, ClientState *clientState) {
+  XreadArgs args = {0};
+  
+  if (parseXreadArgs(command, &args) != 0) {
     return createError("ERR syntax error");
   }
 
-  // Setup stream arrays
-  size_t numStreams = (command->data.array.len - streamsPos - 1) / 2;
-  Stream **streams = malloc(numStreams * sizeof(Stream *));
-  const char **keys = malloc(numStreams * sizeof(char *));
-  const char **ids = malloc(numStreams * sizeof(char *));
-
-  for (size_t i = 0; i < numStreams; i++) {
-    keys[i] = command->data.array.elements[streamsPos + 1 + i]->data.string.str;
-    ids[i] = command->data.array.elements[streamsPos + 1 + numStreams + i]
-                 ->data.string.str;
-    streams[i] = storeGetStream(store, keys[i]);
-  }
-
-  for (size_t i = 0; i < numStreams; i++) {
-    keys[i] = command->data.array.elements[streamsPos + 1 + i]->data.string.str;
-    const char *rawId =
-        command->data.array.elements[streamsPos + 1 + numStreams + i]
-            ->data.string.str;
-
-    streams[i] = storeGetStream(store, keys[i]);
-
-    // Replace $ with latest stream ID using strncmp
-    if (strncmp(rawId, "$", 1) == 0) {
-      StreamEntry *lastEntry = streams[i]->tail;
-      ids[i] = lastEntry ? strdup(lastEntry->id) : strdup("0-0");
-    } else {
-      ids[i] = strdup(rawId);
-    }
+  if (setupXreadStreams(store, command, &args) != 0) {
+    return createError("ERR out of memory");
   }
 
   // Process initial read
   bool hasData = false;
-  StreamInfo *streamInfos =
-      processStreamReads(streams, keys, ids, numStreams, &hasData);
+  StreamInfo *streamInfos = processStreamReads(args.streams, args.keys, args.ids, args.numStreams, &hasData);
 
   // Handle blocking if needed
-  if (blocking && !hasData) {
-
+  if (args.blocking && !hasData) {
     bool gotData;
-    if (blockMs == 0) {
+    if (args.blockMs == 0) {
       gotData = waitForStreamDataInfinite(getStreamBlockState());
     } else {
-      gotData = waitForStreamData(getStreamBlockState(), blockMs);
+      gotData = waitForStreamData(getStreamBlockState(), args.blockMs);
     }
 
     if (gotData) {
-      freeStreamInfo(streamInfos, numStreams);
-      streamInfos = recheckStreams(streams, keys, ids, numStreams);
+      freeStreamInfo(streamInfos, args.numStreams);
+      streamInfos = recheckStreams(args.streams, args.keys, args.ids, args.numStreams);
     } else {
-      freeStreamInfo(streamInfos, numStreams);
-      free(streams);
-      free(keys);
-      free(ids);
+      freeStreamInfo(streamInfos, args.numStreams);
+      freeXreadArgs(&args);
       return createNullBulkString();
     }
   }
 
   // Create response
-  char *response = createXreadResponse(streamInfos, numStreams);
+  char *response = createXreadResponse(streamInfos, args.numStreams);
 
   // Cleanup
-  freeStreamInfo(streamInfos, numStreams);
-  free(streams);
-  free(keys);
-  free(ids);
+  freeStreamInfo(streamInfos, args.numStreams);
+  freeXreadArgs(&args);
 
   return response;
 }

@@ -48,8 +48,17 @@ ThreadPool *createThreadPool(int num_threads) {
   return pool;
 }
 
-void threadPoolAdd(ThreadPool *pool, void (*task)(void *), void *arg) {
+int threadPoolAdd(ThreadPool *pool, void (*task)(void *), void *arg) {
+  if (!pool || !task) {
+    return -1;
+  }
+
   pthread_mutex_lock(&pool->lock);
+
+  if (!pool->running) {
+    pthread_mutex_unlock(&pool->lock);
+    return -1;
+  }
 
   while (pool->task_count == pool->task_capacity) {
     pthread_cond_wait(&pool->not_full, &pool->lock);
@@ -60,6 +69,7 @@ void threadPoolAdd(ThreadPool *pool, void (*task)(void *), void *arg) {
 
   pthread_cond_signal(&pool->not_empty);
   pthread_mutex_unlock(&pool->lock);
+  return 0;
 }
 
 void threadPoolDestroy(ThreadPool *pool) {

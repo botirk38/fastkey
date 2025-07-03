@@ -89,6 +89,10 @@ int acceptClient(RedisServer *server) {
 
 int sendReply(const RedisServer *server, const int client_fd,
               const char *reply) {
+  if (!server || !reply || client_fd < 0) {
+    return -1;
+  }
+
   size_t len = strlen(reply);
   ssize_t sent = send(client_fd, reply, len, 0);
 
@@ -107,12 +111,21 @@ int sendReply(const RedisServer *server, const int client_fd,
 }
 
 void closeClientConnection(RedisServer *server, int client_fd) {
+  if (!server || client_fd < 0) {
+    return;
+  }
   close(client_fd);
-  server->clients_count--;
+  if (server->clients_count > 0) {
+    server->clients_count--;
+  }
   printf("Client disconnected. Total clients: %d\n", server->clients_count);
 }
 
 int connectToHost(const char *host, int port) {
+  if (!host || port <= 0) {
+    return -1;
+  }
+
   // Convert "localhost" to "127.0.0.1"
   const char *ip = strcmp(host, "localhost") == 0 ? "127.0.0.1" : host;
 
@@ -144,6 +157,10 @@ int connectToHost(const char *host, int port) {
 }
 
 int readExactly(int fd, char *buffer, size_t n) {
+  if (fd < 0 || !buffer || n == 0) {
+    return -1;
+  }
+
   size_t total = 0;
   while (total < n) {
     ssize_t count = read(fd, buffer + total, n - total);
@@ -155,6 +172,10 @@ int readExactly(int fd, char *buffer, size_t n) {
 }
 
 int writeExactly(int fd, const char *buffer, size_t n) {
+  if (fd < 0 || !buffer || n == 0) {
+    return -1;
+  }
+
   size_t total = 0;
   while (total < n) {
     ssize_t count = write(fd, buffer + total, n - total);
@@ -166,6 +187,10 @@ int writeExactly(int fd, const char *buffer, size_t n) {
 }
 
 int readLine(int fd, char *buffer, size_t max_len) {
+  if (fd < 0 || !buffer || max_len <= 1) {
+    return -1;
+  }
+
   size_t total_read = 0;
   char c;
 
